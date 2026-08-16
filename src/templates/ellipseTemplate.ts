@@ -1,0 +1,173 @@
+import type { LessonScene } from '../types/lessonScene'
+
+export const ELLIPSE_TEMPLATE_ID = 'math.conic.ellipse-focus-sum'
+
+const ellipseTemplate: LessonScene = {
+  schemaVersion: '0.1',
+  id: 'scene.ellipse.default',
+  templateRef: {
+    id: ELLIPSE_TEMPLATE_ID,
+    version: 1,
+  },
+  metadata: {
+    title: '椭圆的焦点距离和',
+    subject: 'math',
+    topic: '椭圆的定义与焦点性质',
+    gradeRange: '高中',
+    locale: 'zh-CN',
+    summary: '拖动椭圆上的点，观察它到两个焦点的距离之和始终等于长轴全长。',
+  },
+  viewport: {
+    xMin: -7,
+    xMax: 7,
+    yMin: -4.5,
+    yMax: 4.5,
+    allowZoom: true,
+  },
+  parameters: {
+    majorAxis: {
+      type: 'number',
+      label: '长轴全长',
+      description: '椭圆最长直径，即 2a',
+      value: 10,
+      default: 10,
+      min: 1,
+      max: 40,
+      step: 0.5,
+      unit: '',
+      editable: true,
+    },
+    minorAxis: {
+      type: 'number',
+      label: '短轴全长',
+      description: '与长轴垂直的直径，即 2b',
+      value: 6,
+      default: 6,
+      min: 0.5,
+      max: 40,
+      step: 0.5,
+      unit: '',
+      editable: true,
+    },
+    pointAngle: {
+      type: 'number',
+      label: '动点初始角度',
+      description: '动点 P 在椭圆上的初始参数角',
+      value: 0.72,
+      default: 0.72,
+      min: 0,
+      max: 6.283185307179586,
+      step: 0.01,
+      unit: 'rad',
+      editable: false,
+    },
+  },
+  derivedValues: [
+    { id: 'a', label: '半长轴', expression: 'majorAxis / 2', unit: '' },
+    { id: 'b', label: '半短轴', expression: 'minorAxis / 2', unit: '' },
+    { id: 'c', label: '半焦距', expression: 'sqrt(a * a - b * b)', unit: '' },
+    {
+      id: 'focusDistanceSum',
+      label: '焦点距离和',
+      expression: 'distance(point, focusLeft) + distance(point, focusRight)',
+      unit: '',
+    },
+  ],
+  objects: [
+    { id: 'grid', kind: 'grid', role: '背景网格', bindings: { step: '1' }, visibleWhen: 'showGrid' },
+    { id: 'axes', kind: 'axes', role: '坐标轴', bindings: {}, visibleWhen: 'showAxes' },
+    {
+      id: 'ellipse',
+      kind: 'ellipse',
+      role: '主椭圆',
+      bindings: { centerX: '0', centerY: '0', radiusX: 'a', radiusY: 'b' },
+    },
+    { id: 'focusLeft', kind: 'point', role: '左焦点', bindings: { x: '0 - c', y: '0' } },
+    { id: 'focusRight', kind: 'point', role: '右焦点', bindings: { x: 'c', y: '0' } },
+    {
+      id: 'point',
+      kind: 'point',
+      role: '椭圆约束动点',
+      bindings: { x: 'a * cos(pointAngle)', y: 'b * sin(pointAngle)' },
+      interactive: true,
+    },
+    {
+      id: 'distanceLeft',
+      kind: 'segment',
+      role: '动点到左焦点的距离',
+      bindings: { from: 'point', to: 'focusLeft' },
+      visibleWhen: 'showHelperLines',
+    },
+    {
+      id: 'distanceRight',
+      kind: 'segment',
+      role: '动点到右焦点的距离',
+      bindings: { from: 'point', to: 'focusRight' },
+      visibleWhen: 'showHelperLines',
+    },
+    {
+      id: 'trail',
+      kind: 'trail',
+      role: '动点运动轨迹',
+      bindings: { target: 'point' },
+      visibleWhen: 'showTrail',
+    },
+  ],
+  controls: [
+    { id: 'control.majorAxis', label: '调整长轴全长', type: 'slider', target: 'majorAxis' },
+    { id: 'control.minorAxis', label: '调整短轴全长', type: 'slider', target: 'minorAxis' },
+    { id: 'control.play', label: '播放或暂停', type: 'button', target: 'point' },
+    { id: 'control.reset', label: '恢复初始状态', type: 'button', target: 'point' },
+  ],
+  interactions: [
+    { id: 'interaction.drag', trigger: 'drag', target: 'point', action: 'set-angle' },
+    { id: 'interaction.play', trigger: 'animation', target: 'point', action: 'play' },
+    { id: 'interaction.pause', trigger: 'click', target: 'point', action: 'pause' },
+    { id: 'interaction.reset', trigger: 'reset', target: 'point', action: 'reset' },
+  ],
+  annotations: {
+    formula: 'PF₁ + PF₂ = 2a',
+    conclusion: '椭圆上任意一点到两个焦点的距离之和，始终等于长轴全长。',
+  },
+  invariants: [
+    {
+      id: 'invariant.focusDistanceSum',
+      label: '焦点距离和保持不变',
+      expression: 'focusDistanceSum',
+      expectedExpression: 'majorAxis',
+      tolerance: 1e-8,
+      severity: 'error',
+    },
+  ],
+  appearance: {
+    theme: 'light',
+    showAxes: true,
+    showGrid: true,
+    showFocusLabels: true,
+    showPointLabel: true,
+    showHelperLines: true,
+    showIndividualDistances: true,
+    showDistanceSum: true,
+    showFormula: true,
+    showTrail: false,
+    curveColor: '#5B5BD6',
+    focusColor: '#E15C48',
+    pointColor: '#087E8B',
+    helperColor: '#F3A712',
+    lineWidth: 3,
+    pointRadius: 7,
+    fontScale: 1,
+    animationSpeed: 0.55,
+  },
+  lineage: {
+    source: 'built-in',
+    matchLevel: 'template',
+    fingerprint: 'math|ellipse|focus-distance-sum|drag|axis-controls|zh-CN|v1',
+    updatedAt: '2026-08-16T00:00:00.000Z',
+  },
+}
+
+export function createEllipseScene(): LessonScene {
+  return structuredClone(ellipseTemplate)
+}
+

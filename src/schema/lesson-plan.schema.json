@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://word2html.local/schemas/lesson-plan-0.1.json",
+  "title": "LessonPlan 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "subject",
+    "topic",
+    "templateId",
+    "parameterOverrides",
+    "reason"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "0.1" },
+    "status": { "enum": ["matched", "unsupported"] },
+    "subject": { "enum": ["math", "physics", "chemistry", "geography"] },
+    "topic": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "templateId": {
+      "enum": ["math.conic.ellipse-focus-sum", "math.function.quadratic-vertex", "math.function.generic-2d", "experiment.motion.point-2d", "unsupported"]
+    },
+    "parameterOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "majorAxis": { "type": "number", "minimum": 1, "maximum": 40 },
+        "minorAxis": { "type": "number", "minimum": 0.5, "maximum": 40 },
+        "coefficientA": { "type": "number", "minimum": -3, "maximum": 3 },
+        "vertexH": { "type": "number", "minimum": -8, "maximum": 8 },
+        "vertexK": { "type": "number", "minimum": -6, "maximum": 6 }
+      }
+    },
+    "functionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expression", "formula", "xMin", "xMax", "parameters"],
+      "properties": {
+        "expression": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[A-Za-z0-9_+*/^()., \\t-]+$"
+        },
+        "formula": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "xMin": { "type": "number", "minimum": -50, "maximum": 50 },
+        "xMax": { "type": "number", "minimum": -50, "maximum": 50 },
+        "parameters": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "value", "min", "max", "step"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "value": { "type": "number" },
+              "min": { "type": "number" },
+              "max": { "type": "number" },
+              "step": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "experimentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["durationExpression", "xExpression", "yExpression", "formula", "conclusion", "parameters", "metrics", "vectors"],
+      "properties": {
+        "durationExpression": { "$ref": "#/$defs/expression" },
+        "xExpression": { "$ref": "#/$defs/expression" },
+        "yExpression": { "$ref": "#/$defs/expression" },
+        "formula": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "conclusion": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "parameters": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/dynamicParameter" }
+        },
+        "metrics": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "expression", "unit"],
+            "properties": {
+              "id": { "$ref": "#/$defs/dynamicId" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "expression": { "$ref": "#/$defs/expression" },
+              "unit": { "type": "string", "maxLength": 16 }
+            }
+          }
+        },
+        "vectors": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "xExpression", "yExpression", "scale", "unit"],
+            "properties": {
+              "id": { "$ref": "#/$defs/dynamicId" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "xExpression": { "$ref": "#/$defs/expression" },
+              "yExpression": { "$ref": "#/$defs/expression" },
+              "scale": { "type": "number", "minimum": 0.01, "maximum": 20 },
+              "unit": { "type": "string", "minLength": 1, "maxLength": 16 }
+            }
+          }
+        }
+      }
+    },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 240 }
+  },
+  "$defs": {
+    "expression": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9_+*/^()., \\t-]+$"
+    },
+    "dynamicId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+    },
+    "dynamicParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "value", "min", "max", "step"],
+      "properties": {
+        "id": { "$ref": "#/$defs/dynamicId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "value": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://word2html.local/schemas/lesson-scene-0.1.json",
+  "title": "LessonScene 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "templateRef",
+    "metadata",
+    "viewport",
+    "parameters",
+    "derivedValues",
+    "objects",
+    "controls",
+    "interactions",
+    "annotations",
+    "invariants",
+    "appearance",
+    "lineage"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "0.1" },
+    "id": { "$ref": "#/$defs/id" },
+    "templateRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "subject", "topic", "gradeRange", "locale", "summary"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "subject": { "enum": ["math", "physics", "chemistry", "geography"] },
+        "topic": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "gradeRange": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "locale": { "const": "zh-CN" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xMin", "xMax", "yMin", "yMax", "allowZoom"],
+      "properties": {
+        "xMin": { "type": "number" },
+        "xMax": { "type": "number" },
+        "yMin": { "type": "number" },
+        "yMax": { "type": "number" },
+        "allowZoom": { "type": "boolean" }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/numberParameter" },
+          { "$ref": "#/$defs/booleanParameter" }
+        ]
+      }
+    },
+    "derivedValues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "expression", "unit"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "expression": { "$ref": "#/$defs/expression" },
+          "unit": { "type": "string", "maxLength": 20 }
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "role", "bindings"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "kind": { "enum": ["axes", "grid", "ellipse", "parabola", "function-curve", "time-point", "vector", "ground-line", "point", "segment", "label", "trail"] },
+          "role": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "unit": { "type": "string", "minLength": 1, "maxLength": 16 },
+          "bindings": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/expression" }
+          },
+          "visibleWhen": {
+            "enum": [
+              "theme",
+              "showAxes",
+              "showGrid",
+              "showFocusLabels",
+              "showPointLabel",
+              "showHelperLines",
+              "showIndividualDistances",
+              "showDistanceSum",
+              "showFormula",
+              "showTrail",
+              "curveColor",
+              "focusColor",
+              "pointColor",
+              "helperColor",
+              "lineWidth",
+              "pointRadius",
+              "fontScale",
+              "animationSpeed"
+            ]
+          },
+          "interactive": { "type": "boolean" }
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "type", "target"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "type": { "enum": ["slider", "number", "toggle", "button"] },
+          "target": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "interactions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "trigger", "target", "action"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "trigger": { "enum": ["drag", "click", "animation", "reset"] },
+          "target": { "$ref": "#/$defs/id" },
+          "action": { "enum": ["set-angle", "play", "pause", "reset"] }
+        }
+      }
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "conclusion"],
+      "properties": {
+        "formula": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "conclusion": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "expression", "expectedExpression", "tolerance", "severity"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "expression": { "$ref": "#/$defs/expression" },
+          "expectedExpression": { "$ref": "#/$defs/expression" },
+          "tolerance": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.01 },
+          "severity": { "enum": ["error", "warning"] }
+        }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theme",
+        "showAxes",
+        "showGrid",
+        "showFocusLabels",
+        "showPointLabel",
+        "showHelperLines",
+        "showIndividualDistances",
+        "showDistanceSum",
+        "showFormula",
+        "showTrail",
+        "curveColor",
+        "focusColor",
+        "pointColor",
+        "helperColor",
+        "lineWidth",
+        "pointRadius",
+        "fontScale",
+        "animationSpeed"
+      ],
+      "properties": {
+        "theme": { "enum": ["light", "dark"] },
+        "showAxes": { "type": "boolean" },
+        "showGrid": { "type": "boolean" },
+        "showFocusLabels": { "type": "boolean" },
+        "showPointLabel": { "type": "boolean" },
+        "showHelperLines": { "type": "boolean" },
+        "showIndividualDistances": { "type": "boolean" },
+        "showDistanceSum": { "type": "boolean" },
+        "showFormula": { "type": "boolean" },
+        "showTrail": { "type": "boolean" },
+        "curveColor": { "$ref": "#/$defs/color" },
+        "focusColor": { "$ref": "#/$defs/color" },
+        "pointColor": { "$ref": "#/$defs/color" },
+        "helperColor": { "$ref": "#/$defs/color" },
+        "lineWidth": { "type": "number", "minimum": 1, "maximum": 8 },
+        "pointRadius": { "type": "number", "minimum": 4, "maximum": 14 },
+        "fontScale": { "type": "number", "minimum": 0.8, "maximum": 1.5 },
+        "animationSpeed": { "type": "number", "minimum": 0.2, "maximum": 2 }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "matchLevel", "fingerprint", "updatedAt"],
+      "properties": {
+        "source": { "enum": ["built-in", "local-parser", "model", "imported"] },
+        "matchLevel": { "enum": ["exact", "template", "similar", "new"] },
+        "fingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "parentSceneId": { "$ref": "#/$defs/id" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,119}$"
+    },
+    "expression": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9_+*/^()., \\t-]+$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "numberParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "description", "value", "default", "min", "max", "step", "unit", "editable"],
+      "properties": {
+        "type": { "const": "number" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "value": { "type": "number" },
+        "default": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "type": "string", "maxLength": 20 },
+        "editable": { "type": "boolean" }
+      }
+    },
+    "booleanParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "description", "value", "default", "editable"],
+      "properties": {
+        "type": { "const": "boolean" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "value": { "type": "boolean" },
+        "default": { "type": "boolean" },
+        "editable": { "type": "boolean" }
+      }
+    }
+  }
+}
