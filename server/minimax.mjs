@@ -8,7 +8,7 @@ export const lessonPlanSchema = JSON.parse(readFileSync(schemaUrl, 'utf8'))
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 const validatePlanSchema = ajv.compile(lessonPlanSchema)
 const TOOL_NAME = 'emit_lesson_plan'
-export const GENERATION_API_VERSION = 'lesson-plan-0.6'
+export const GENERATION_API_VERSION = 'lesson-plan-0.9'
 
 function finiteNumberFromString(value) {
   if (typeof value !== 'string') return value
@@ -425,7 +425,9 @@ export function validateGeneratedPlan(plan) {
     throw new Error('非通用函数计划不能包含函数规格。')
   }
   if (plan.templateId === 'experiment.motion.point-2d') {
-    if (plan.subject !== 'physics') throw new Error('二维点运动实验必须归类为物理。')
+    if (plan.subject !== 'physics' && plan.subject !== 'math') {
+      throw new Error('二维参数轨迹运行时只支持数学或物理。')
+    }
     if (Object.keys(plan.parameterOverrides).length > 0) throw new Error('时间实验不能包含模板参数覆盖。')
     if (!plan.experimentSpec) throw new Error('时间实验缺少实验规格。')
     validateTimeExperimentSpec(plan.experimentSpec)
@@ -438,6 +440,52 @@ export function validateGeneratedPlan(plan) {
   return plan
 }
 
+function assertContextualEditPlan(basePlan, editedPlan) {
+  if (editedPlan.status !== 'matched') {
+    throw new Error('二次编辑不能把当前可用场景改为不支持状态。')
+  }
+  if (editedPlan.templateId !== basePlan.templateId) {
+    throw new Error('二次编辑不能更换当前场景的运行模板。')
+  }
+  if (editedPlan.subject !== basePlan.subject) {
+    throw new Error('二次编辑不能改变当前场景的学科分类。')
+  }
+  return editedPlan
+}
+
+function contextualEditSchema(basePlan) {
+  const schema = structuredClone(lessonPlanSchema)
+  schema.properties.status = { const: 'matched' }
+  schema.properties.subject = { const: basePlan.subject }
+  schema.properties.templateId = { const: basePlan.templateId }
+  if (basePlan.templateId === 'experiment.motion.point-2d') {
+    schema.required = [...new Set([...schema.required, 'experimentSpec'])]
+    delete schema.properties.functionSpec
+  } else if (basePlan.templateId === 'math.function.generic-2d') {
+    schema.required = [...new Set([...schema.required, 'functionSpec'])]
+    delete schema.properties.experimentSpec
+  } else {
+    delete schema.properties.functionSpec
+    delete schema.properties.experimentSpec
+  }
+  return schema
+}
+
+function contextualEditGuidance(basePlan) {
+  if (basePlan.templateId === 'experiment.motion.point-2d') {
+    return [
+      '当前是 experiment.motion.point-2d 参数轨迹；必须完整保留并修改 experimentSpec，绝不能改用或返回 functionSpec。',
+      'bodyLabel 和 additionalBodies[].label 是坐标前的短名称，画布会自动追加 (x,y)；要显示 P(x,y) 或 Q(x,y)，标签只写 P 或 Q。',
+      'vectors[].labelMode 可为 full 或 value。full 显示“标签 数值 单位”；value 只显示数值，适合把“PF1 5.20 长度单位”简化为“5.20”。',
+      '用户说“函数图像中的文字”仍指当前参数轨迹的标签，不代表要切换成 math.function.generic-2d。不得把 formula 或 conclusion 清空。',
+    ].join('\n')
+  }
+  if (basePlan.templateId === 'math.function.generic-2d') {
+    return '当前是 math.function.generic-2d；必须完整保留并修改 functionSpec，绝不能返回 experimentSpec，formula 不得为空。'
+  }
+  return '当前是审核模板，只能修改该模板允许的参数覆盖和教学说明，不得增加 functionSpec 或 experimentSpec。'
+}
+
 function systemPrompt() {
   return [
     '你是 Word2HTML 的 K12 教学场景规划器，只负责选择模板或描述安全的二维显式函数，不生成 HTML、JavaScript 或其他代码。',
@@ -446,16 +494,16 @@ function systemPrompt() {
     '对于不能命中上述模板、但能写成单变量显式函数 y=f(x) 的数学内容，使用 math.function.generic-2d 并填写 functionSpec。',
     '通用表达式只能使用 x、参数 ID、数字、括号、+ - * / ^，以及 sin cos tan sqrt abs exp log ln min max pow step 和常量 pi e。step(z) 在 z>=0 时为 1，否则为 0。乘法必须显式写 *，不能写 2x。',
     '通用函数定义域必须在 [-50,50] 内且 xMin<xMax；parameters 最多 6 个，ID 使用 ASCII 字母开头，给出合理且有限的 value/min/max/step。无可调参数时返回空数组。',
-    '对最多 4 个质点随时间运动的物理实验（自由落体、抛体、碰撞、单摆、水平弹簧振子等），使用 experiment.motion.point-2d 并填写 experimentSpec。主物体使用 bodyId/bodyLabel/xExpression/yExpression；其他物体放入 additionalBodies。',
+    '对最多 4 个点随参数 t 变化的数学轨迹，或最多 4 个质点随时间运动的物理实验（自由落体、抛体、碰撞、单摆、水平弹簧振子等），使用 experiment.motion.point-2d 并填写 experimentSpec。主物体使用 bodyId/bodyLabel/xExpression/yExpression；其他物体放入 additionalBodies。',
     '实验表达式遵循同一数学白名单，可额外使用时间变量 t。durationExpression 只能引用参数且结果应为 0.2 到 60 秒；位置、测量量和矢量表达式可以引用 t、参数以及已声明的 metrics.id。可把碰撞时刻 tc、碰后速度等公共子表达式放入 metrics 并复用，但不得循环引用。',
     '所有表达式字段都必须是 JSON 字符串；常量表达式也要写成 "0"，不能写成数字 0。JSON 字符串的内容本身不能再带首尾引号，例如值应为 "L*sin(theta)"，不能让内容变成 L*sin(theta) 后面又多一个引号字符。',
-    '实验必须返回 additionalBodies、vectors 和 constraints 数组；没有时返回空数组。每个矢量包含 id、label、xExpression、yExpression、scale、unit、bodyId，bodyId 必须绑定已声明物体；scale 只把物理量换算为坐标长度。运动物体、矢量、约束均最多 4 个。',
+    '实验必须返回 additionalBodies、vectors 和 constraints 数组；没有时返回空数组。每个矢量包含 id、label、xExpression、yExpression、scale、unit、bodyId，bodyId 必须绑定已声明物体；scale 只把物理量换算为坐标长度。display 可选 arrow 或 distance：力学量使用 arrow；几何距离使用 distance、scale=1，并令分量等于目标点坐标减起点坐标。labelMode 可选 full 或 value：full 显示标签、数值和单位，value 只显示数值。运动物体、矢量、约束均最多 4 个。',
     'constraints 用于可视化绳或弹簧，每项包含 id、label、type（rope 或 spring）、bodyId、anchorXExpression、anchorYExpression、restLengthExpression。三个长度/锚点表达式可引用 t、参数和 metrics。rope 的物体到锚点距离必须在整个运行区间等于 restLengthExpression；spring 的 restLengthExpression 表示自然长度，不要求当前长度恒定。',
     '自由落体建议使用 durationExpression="sqrt(2*h0/g)"、xExpression="0"、yExpression="max(0,h0-0.5*g*t^2)"，提供高度与速度测量量，并返回速度矢量 vx="0"、vy="0-g*t"、scale=0.1、unit="m/s"，以及重力加速度矢量 ax="0"、ay="0-g"、scale=0.15、unit="m/s^2"。parameters 最多 6 个、metrics 最多 4 个。',
     '一维弹性碰撞可令 tc=(x2-x1)/(u1-u2)，碰后速度 v1=((m1-m2)*u1+2*m2*u2)/(m1+m2)、v2=(2*m1*u1+(m2-m1)*u2)/(m1+m2)；位置用 min(t,tc) 与 max(0,t-tc) 分段，速度矢量用 step(t-tc) 切换。durationExpression 必须比 tc 至少多 2 秒，以展示碰后运动。参数范围尽量保证 u1>u2、x2>x1，运行时会拒绝除零组合。',
     '小角度单摆可把 theta=theta0*cos(sqrt(g/L)*t) 放入 metrics，物体位置写成 x=L*sin(theta)、y=H-L*cos(theta)，durationExpression="4*pi*sqrt(L/g)" 以展示两个周期，锚点为 (0,H)，rope 的自然长度写成 L；theta0 建议使用弧度且范围不超过 0.35。未要求速度等矢量时不要自行添加；若要求单摆速度，必须把 thetaDot=0-theta0*sqrt(g/L)*sin(sqrt(g/L)*t) 也声明为 metric，再使用 vx=L*cos(theta)*thetaDot、vy=L*sin(theta)*thetaDot。水平弹簧振子可写 x=A*cos(w*t)、y=0，固定点放在运动范围左侧，spring 自然长度为固定点到平衡位置的距离。',
     '两个独立钟摆不要使用 H1/H2 高度参数，避免浪费 6 个参数的额度。推荐共享 g，并声明 L1、L2、theta01、theta02 共 5 个可调参数；metrics 使用 theta1=theta01*cos(sqrt(g/L1)*t)、theta2=theta02*cos(sqrt(g/L2)*t)，两个摆球位置分别为 x=-2+L1*sin(theta1), y=0-L1*cos(theta1) 和 x=2+L2*sin(theta2), y=0-L2*cos(theta2)，两个 rope 固定点分别为 (-2,0)、(2,0)，自然长度为 L1、L2；durationExpression="4*pi*sqrt(max(L1,L2)/g)"。',
-    '时间实验的 parameterOverrides 必须为空，subject 必须为 physics。化学、地理以及无法表达为最多 4 个质点运动的实验仍返回 unsupported。',
+    '参数轨迹的 parameterOverrides 必须为空；数学轨迹的 subject 为 math，物理运动的 subject 为 physics。化学、地理以及无法表达为最多 4 个点轨迹的实验仍返回 unsupported。',
     '椭圆模板的 majorAxis 和 minorAxis 表示长轴全长与短轴全长；没有明确数值时省略对应覆盖项，使用本地默认值。',
     '二次函数模板的 coefficientA、vertexH、vertexK 对应 a、h、k；a 不能为 0，没有明确数值时省略。',
     '椭圆或二次函数模板不填写 functionSpec/experimentSpec；通用函数不填写 experimentSpec；时间实验不填写 functionSpec。schemaVersion 必须是字符串 "0.1"。',
@@ -553,6 +601,110 @@ export async function generateLessonPlan(prompt, options = {}) {
   }
 }
 
+export async function editLessonPlan(instruction, basePlan, options = {}) {
+  const config = readMinimaxConfig(options.environment)
+  if (!config.apiKey) throw new Error('MiniMax-M3 未配置：请设置 MINIMAX_API_KEY。')
+  let normalizedBase
+  try {
+    normalizedBase = validateGeneratedPlan(normalizeGeneratedPlan(basePlan))
+  } catch {
+    throw new Error('二次编辑请求中的当前 LessonPlan 无效。')
+  }
+  if (normalizedBase.status !== 'matched') throw new Error('只有可运行场景可以进行二次编辑。')
+
+  const client = options.client ?? new Anthropic({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    timeout: config.timeout,
+    maxRetries: 2,
+  })
+  const tool = {
+    name: TOOL_NAME,
+    description: '返回基于当前场景修改后的完整 Word2HTML LessonPlan 0.1。',
+    input_schema: contextualEditSchema(normalizedBase),
+  }
+  const editText = [
+    '任务类型：基于当前场景进行二次编辑。',
+    `当前 LessonPlan：${JSON.stringify(normalizedBase)}`,
+    `用户修改要求：${instruction}`,
+    '返回修改后的完整 LessonPlan，不要只返回补丁。保留用户未要求修改的字段、对象 ID、参数和教学含义。',
+    '不得改变 templateId、subject 或 status；如要求超出当前模板能力，也应尽量保持当前计划，不得伪造代码或新渲染器。',
+    '参数数值和纯外观设置应由应用本地面板处理；这里仅处理表达式、对象、测量量、矢量、约束、公式和说明等结构修改。',
+    contextualEditGuidance(normalizedBase),
+  ].join('\n')
+  const userMessage = { role: 'user', content: [{ type: 'text', text: editText }] }
+  const request = (messages) => client.messages.create({
+    model: config.model,
+    max_tokens: config.maxTokens,
+    temperature: config.temperature,
+    thinking: { type: 'disabled' },
+    system: systemPrompt(),
+    messages,
+    tools: [tool],
+    tool_choice: { type: 'tool', name: TOOL_NAME },
+  })
+
+  const responses = [await request([userMessage])]
+  let plan
+  let firstValidationError
+  try {
+    plan = assertContextualEditPlan(
+      normalizedBase,
+      validateGeneratedPlan(normalizeGeneratedPlan(extractPlanFromModelResponse(responses[0]))),
+    )
+  } catch (error) {
+    firstValidationError = error instanceof Error ? error.message : '首次二次编辑校验失败。'
+    const feedback = [
+      '上一次二次编辑结果未通过本地校验。只修正错误，不要解释。',
+      `校验错误：${firstValidationError.slice(0, 1800)}`,
+      '必须保持当前 templateId、subject 和 matched 状态；所有引用必须指向已声明 ID。',
+    ].join('\n')
+    const toolUse = responses[0]?.content?.find(
+      (block) => block?.type === 'tool_use' && block?.name === TOOL_NAME && typeof block.id === 'string',
+    )
+    const repairMessages = toolUse
+      ? [
+          userMessage,
+          { role: 'assistant', content: responses[0].content },
+          {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: toolUse.id, is_error: true, content: feedback }],
+          },
+        ]
+      : [{ role: 'user', content: [{ type: 'text', text: `${editText}\n\n${feedback}` }] }]
+    responses.push(await request(repairMessages))
+    try {
+      plan = assertContextualEditPlan(
+        normalizedBase,
+        validateGeneratedPlan(normalizeGeneratedPlan(extractPlanFromModelResponse(responses[1]))),
+      )
+    } catch (error) {
+      const repairError = error instanceof Error ? error.message : '二次编辑纠错校验失败。'
+      throw new Error(`MiniMax 自动纠错后二次编辑仍无效：${repairError}（首次错误：${firstValidationError}）`)
+    }
+  }
+
+  const totalUsage = (name) => {
+    const values = responses
+      .map((response) => response.usage?.[name])
+      .filter((value) => Number.isFinite(value))
+    return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : undefined
+  }
+  const finalResponse = responses.at(-1)
+  return {
+    apiVersion: GENERATION_API_VERSION,
+    plan,
+    usage: {
+      inputTokens: totalUsage('input_tokens'),
+      cachedInputTokens: totalUsage('cache_read_input_tokens'),
+      outputTokens: totalUsage('output_tokens'),
+      modelCalls: responses.length,
+      repaired: responses.length > 1,
+    },
+    provider: { name: 'MiniMax', model: finalResponse?.model ?? config.model },
+  }
+}
+
 export async function repairLessonPlan(prompt, previousPlan, validationError, options = {}) {
   const config = readMinimaxConfig(options.environment)
   if (!config.apiKey) throw new Error('MiniMax-M3 未配置：请设置 MINIMAX_API_KEY。')
@@ -565,6 +717,14 @@ export async function repairLessonPlan(prompt, previousPlan, validationError, op
   } catch {
     throw new Error('自动纠错请求中的上一版 LessonPlan 无效。')
   }
+  let normalizedBase
+  if (options.basePlan !== undefined) {
+    try {
+      normalizedBase = validateGeneratedPlan(normalizeGeneratedPlan(options.basePlan))
+    } catch {
+      throw new Error('二次编辑纠错请求中的当前 LessonPlan 无效。')
+    }
+  }
   const client = options.client ?? new Anthropic({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
@@ -572,11 +732,15 @@ export async function repairLessonPlan(prompt, previousPlan, validationError, op
     maxRetries: 2,
   })
   const feedback = [
-    `用户原始教学目标：${prompt}`,
+    normalizedBase ? '任务类型：修正基于当前场景的二次编辑结果。' : '任务类型：修正首次场景规划结果。',
+    normalizedBase ? `编辑前 LessonPlan：${JSON.stringify(normalizedBase)}` : null,
+    `用户${normalizedBase ? '修改要求' : '原始教学目标'}：${prompt}`,
     `上一版 LessonPlan：${JSON.stringify(normalizedPrevious)}`,
     `浏览器本地校验错误：${validationError.trim()}`,
-    '请保持原始目标，只修正导致校验失败的字段。不要解释，不要生成代码。',
-  ].join('\n')
+    normalizedBase
+      ? '请保持编辑要求及未要求修改的字段，只修正导致校验失败的字段；不得改变 templateId、subject 或 matched 状态。不要解释，不要生成代码。'
+      : '请保持原始目标，只修正导致校验失败的字段。不要解释，不要生成代码。',
+  ].filter(Boolean).join('\n')
   const response = await client.messages.create({
     model: config.model,
     max_tokens: config.maxTokens,
@@ -587,7 +751,7 @@ export async function repairLessonPlan(prompt, previousPlan, validationError, op
     tools: [{
       name: TOOL_NAME,
       description: '返回修正后的紧凑 Word2HTML LessonPlan 0.1。',
-      input_schema: lessonPlanSchema,
+      input_schema: normalizedBase ? contextualEditSchema(normalizedBase) : lessonPlanSchema,
     }],
     tool_choice: { type: 'tool', name: TOOL_NAME },
   })
@@ -596,6 +760,7 @@ export async function repairLessonPlan(prompt, previousPlan, validationError, op
     plan = validateGeneratedPlan(
       normalizeGeneratedPlan(extractPlanFromModelResponse(response)),
     )
+    if (normalizedBase) plan = assertContextualEditPlan(normalizedBase, plan)
   } catch (error) {
     const message = error instanceof Error ? error.message : '纠错规划校验失败。'
     throw new Error(`MiniMax 自动纠错后规划仍无效：${message}`)

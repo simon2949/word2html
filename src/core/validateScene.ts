@@ -96,9 +96,10 @@ function expressionIssues(scene: LessonScene): SceneValidationIssue[] {
     inspect(invariant.expectedExpression, `/invariants/${index}/expectedExpression`)
   })
   scene.objects.forEach((object, objectIndex) => {
-    Object.entries(object.bindings).forEach(([binding, expression]) =>
-      inspect(expression, `/objects/${objectIndex}/bindings/${binding}`),
-    )
+    Object.entries(object.bindings).forEach(([binding, expression]) => {
+      if (binding === 'labelMode') return
+      inspect(expression, `/objects/${objectIndex}/bindings/${binding}`)
+    })
   })
 
   const graph = new Map<string, string[]>()

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  editLessonPlan,
   extractPlanFromModelResponse,
   generateLessonPlan,
   normalizeGeneratedPlan,
@@ -355,7 +356,7 @@ describe('MiniMax compact planning', () => {
     expect(request.tool_choice).toEqual({ type: 'tool', name: 'emit_lesson_plan' })
     expect(request.tools[0].input_schema.title).toBe('LessonPlan 0.1')
     expect(result.plan).toEqual(plan)
-    expect(result.apiVersion).toBe('lesson-plan-0.6')
+    expect(result.apiVersion).toBe('lesson-plan-0.9')
     expect(result.usage).toEqual({
       inputTokens: 80, cachedInputTokens: 30, outputTokens: 90,
       modelCalls: 1, repaired: false,
@@ -396,6 +397,102 @@ describe('MiniMax compact planning', () => {
       inputTokens: 240, cachedInputTokens: 50, outputTokens: 130,
       modelCalls: 2, repaired: true,
     })
+  })
+
+  it('edits a complete current plan while preserving its renderer contract', async () => {
+    const current = timeExperimentPlan()
+    const edited = {
+      ...current,
+      reason: '保留当前实验，并把两条辅助量显示为距离直线。',
+      experimentSpec: {
+        ...current.experimentSpec,
+        vectors: current.experimentSpec.vectors.map((vector) => ({
+          ...vector, display: 'distance', labelMode: 'value', scale: 1,
+        })),
+      },
+    }
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: edited }],
+      usage: { input_tokens: 220, cache_read_input_tokens: 40, output_tokens: 130 },
+    })
+
+    const result = await editLessonPlan('改为无箭头距离直线并标注长度', current, {
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const requestText = create.mock.calls[0][0].messages[0].content[0].text
+    expect(requestText).toContain('当前 LessonPlan')
+    expect(requestText).toContain('改为无箭头距离直线')
+    expect(requestText).toContain('不得改变 templateId')
+    expect(requestText).toContain('标签只写 P 或 Q')
+    const editSchema = create.mock.calls[0][0].tools[0].input_schema
+    expect(editSchema.properties.templateId).toEqual({ const: 'experiment.motion.point-2d' })
+    expect(editSchema.properties.subject).toEqual({ const: 'physics' })
+    expect(editSchema.required).toContain('experimentSpec')
+    expect(editSchema.properties.functionSpec).toBeUndefined()
+    expect(result.plan.experimentSpec.vectors[0].display).toBe('distance')
+    expect(result.plan.experimentSpec.vectors[0].labelMode).toBe('value')
+    expect(result.apiVersion).toBe('lesson-plan-0.9')
+    expect(result.usage.modelCalls).toBe(1)
+  })
+
+  it('repairs a label edit that initially drifts into a generic function plan', async () => {
+    const current = { ...timeExperimentPlan(), subject: 'math', topic: '双曲线焦点距离差' }
+    const invalid = {
+      ...genericFunctionPlan(),
+      functionSpec: { ...genericFunctionPlan().functionSpec, formula: '' },
+    }
+    const edited = {
+      ...current,
+      experimentSpec: {
+        ...current.experimentSpec,
+        bodyLabel: 'P',
+        additionalBodies: [{ id: 'left', label: 'Q', xExpression: '0-t', yExpression: '0' }],
+        vectors: current.experimentSpec.vectors.map((vector) => ({ ...vector, labelMode: 'value' })),
+      },
+    }
+    const create = vi.fn()
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'bad-label-edit', name: 'emit_lesson_plan', input: invalid }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'fixed-label-edit', name: 'emit_lesson_plan', input: edited }],
+        usage: { input_tokens: 140, output_tokens: 80 },
+      })
+
+    const result = await editLessonPlan(
+      '简化函数图像中的文字，左支动点改为 Q(x,y)，距离只显示数值',
+      current,
+      { environment: { MINIMAX_API_KEY: 'test-key' }, client: { messages: { create } } },
+    )
+
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(result.plan.templateId).toBe('experiment.motion.point-2d')
+    expect(result.plan.experimentSpec.bodyLabel).toBe('P')
+    expect(result.plan.experimentSpec.additionalBodies[0].label).toBe('Q')
+    expect(result.plan.experimentSpec.vectors[0].labelMode).toBe('value')
+    expect(result.usage.repaired).toBe(true)
+  })
+
+  it('rejects a contextual edit that changes the renderer template', async () => {
+    const create = vi.fn()
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'edit-1', name: 'emit_lesson_plan', input: ellipsePlan() }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'edit-2', name: 'emit_lesson_plan', input: ellipsePlan() }],
+        usage: { input_tokens: 130, output_tokens: 50 },
+      })
+
+    await expect(editLessonPlan('换成椭圆', timeExperimentPlan(), {
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })).rejects.toThrow(/二次编辑仍无效.*不能更换/)
+    expect(create).toHaveBeenCalledTimes(2)
   })
 
   it('stops after one failed repair instead of repeatedly spending tokens', async () => {
@@ -455,5 +552,7 @@ describe('MiniMax compact planning', () => {
       .toThrow(/不能为 0/)
     expect(validateGeneratedPlan(quadraticPlan({ coefficientA: -2, vertexH: 1, vertexK: 3 })))
       .toEqual(quadraticPlan({ coefficientA: -2, vertexH: 1, vertexK: 3 }))
+    const mathTrace = { ...timeExperimentPlan(), subject: 'math', topic: '双曲线参数轨迹' }
+    expect(validateGeneratedPlan(mathTrace)).toEqual(mathTrace)
   })
 })

@@ -1,0 +1,47 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-0.9",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "正弦函数的振幅、频率与相位",
+    "templateId": "math.function.generic-2d",
+    "parameterOverrides": {},
+    "functionSpec": {
+      "expression": "A*sin(B*x+C)",
+      "formula": "y = A sin(Bx + C)",
+      "xMin": -10,
+      "xMax": 10,
+      "parameters": [
+        {
+          "id": "A",
+          "label": "振幅 A",
+          "value": 2,
+          "min": 0.5,
+          "max": 5,
+          "step": 0.1
+        },
+        {
+          "id": "B",
+          "label": "角频率 B",
+          "value": 1,
+          "min": 0.2,
+          "max": 3,
+          "step": 0.1
+        },
+        {
+          "id": "C",
+          "label": "初相位 C",
+          "value": 0,
+          "min": -3.14,
+          "max": 3.14,
+          "step": 0.1
+        }
+      ]
+    },
+    "reason": "调节 A、B、C，比较振幅、周期和水平平移的变化。"
+  }
+}

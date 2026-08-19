@@ -32,6 +32,48 @@ describe('TimeExperimentCanvas vectors', () => {
     expect(html).toContain('重力加速度 9.80 m/s^2')
   })
 
+  it('renders geometric distances as full straight segments with midpoint labels', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'point', bodyLabel: 'P',
+      xExpression: 't', yExpression: '2', formula: 'PF=sqrt((3-t)^2+4)',
+      conclusion: '距离连线不显示箭头，并标注实际长度。',
+      parameters: [], metrics: [], additionalBodies: [], constraints: [],
+      vectors: [{
+        id: 'distance', label: 'PF', xExpression: '3-t', yExpression: '0-2',
+        scale: 1, unit: 'm', bodyId: 'point', display: 'distance',
+      }],
+    }, {
+      title: '几何距离', topic: '点到点距离', subject: 'math', summary: '观察距离连线。',
+    })
+
+    const html = renderToStaticMarkup(createElement(TimeExperimentCanvas, { scene, time: 1, zoom: 1 }))
+
+    expect(html).toContain('data-vector-display="distance"')
+    expect(html).toContain('PF 2.83 m')
+    expect(html).not.toContain('<polygon')
+  })
+
+  it('can simplify a distance annotation to its numeric value only', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'point', bodyLabel: 'Q',
+      xExpression: '1', yExpression: '2', formula: 'QF=sqrt(8)',
+      conclusion: '距离线上只显示数值。', parameters: [], metrics: [], constraints: [],
+      vectors: [{
+        id: 'distance', label: 'QF1', xExpression: '0-2', yExpression: '0-2',
+        scale: 1, unit: '长度单位', bodyId: 'point', display: 'distance', labelMode: 'value',
+      }],
+    }, {
+      title: '简洁距离标签', topic: '距离', subject: 'math', summary: '只保留距离值。',
+    })
+
+    const html = renderToStaticMarkup(createElement(TimeExperimentCanvas, { scene, time: 0, zoom: 1 }))
+
+    expect(html).toContain('>2.83</text>')
+    expect(html).not.toContain('QF1 2.83')
+    expect(html).not.toContain('2.83 长度单位')
+    expect(html).toContain('Q(1.00, 2.00)')
+  })
+
   it('renders multiple moving bodies with independent trails and labels', () => {
     const scene = createTimeExperimentScene({
       durationExpression: '4', bodyId: 'left', bodyLabel: '左球',
@@ -47,8 +89,8 @@ describe('TimeExperimentCanvas vectors', () => {
 
     expect(html.match(/data-body-id=/g)).toHaveLength(2)
     expect(html.match(/<polyline/g)).toHaveLength(2)
-    expect(html).toContain('左球 (-2.00, 0.00)')
-    expect(html).toContain('右球 (2.00, 0.00)')
+    expect(html).toContain('左球(-2.00, 0.00)')
+    expect(html).toContain('右球(2.00, 0.00)')
   })
 
   it('renders rope and spring constraint primitives with fixed anchors', () => {

@@ -1,0 +1,129 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-0.9",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "双曲线的焦点距离差",
+    "templateId": "experiment.motion.point-2d",
+    "parameterOverrides": {},
+    "experimentSpec": {
+      "durationExpression": "T",
+      "xExpression": "a*(exp(u)+exp(0-u))/2",
+      "yExpression": "b*(exp(u)-exp(0-u))/2",
+      "bodyId": "hyperbolaRight",
+      "bodyLabel": "P",
+      "additionalBodies": [
+        {
+          "id": "hyperbolaLeft",
+          "label": "Q",
+          "xExpression": "0-a*(exp(u)+exp(0-u))/2",
+          "yExpression": "b*(exp(u)-exp(0-u))/2"
+        },
+        {
+          "id": "focusRight",
+          "label": "F2",
+          "xExpression": "c",
+          "yExpression": "0"
+        },
+        {
+          "id": "focusLeft",
+          "label": "F1",
+          "xExpression": "0-c",
+          "yExpression": "0"
+        }
+      ],
+      "formula": "x^2/a^2 - y^2/b^2 = 1, |PF1 - PF2| = 2a",
+      "conclusion": "播放轨迹可描出双曲线左右两支；右支动点到两个焦点的距离差绝对值始终等于 2a。",
+      "parameters": [
+        {
+          "id": "a",
+          "label": "半实轴 a",
+          "value": 3,
+          "min": 1,
+          "max": 6,
+          "step": 0.25
+        },
+        {
+          "id": "b",
+          "label": "半虚轴 b",
+          "value": 2,
+          "min": 0.5,
+          "max": 5,
+          "step": 0.25
+        },
+        {
+          "id": "U",
+          "label": "轨迹范围 U",
+          "value": 2.4,
+          "min": 1,
+          "max": 3.2,
+          "step": 0.1
+        },
+        {
+          "id": "T",
+          "label": "描绘时间 T",
+          "value": 8,
+          "min": 3,
+          "max": 15,
+          "step": 0.5
+        }
+      ],
+      "metrics": [
+        {
+          "id": "c",
+          "label": "焦半距 c",
+          "expression": "sqrt(a^2+b^2)",
+          "unit": ""
+        },
+        {
+          "id": "u",
+          "label": "轨迹参数 u",
+          "expression": "0-U+2*U*t/T",
+          "unit": ""
+        },
+        {
+          "id": "distanceDifference",
+          "label": "距离差绝对值",
+          "expression": "abs(sqrt((a*(exp(u)+exp(0-u))/2-c)^2+(b*(exp(u)-exp(0-u))/2)^2)-sqrt((a*(exp(u)+exp(0-u))/2+c)^2+(b*(exp(u)-exp(0-u))/2)^2))",
+          "unit": ""
+        },
+        {
+          "id": "expectedDifference",
+          "label": "理论常量 2a",
+          "expression": "2*a",
+          "unit": ""
+        }
+      ],
+      "vectors": [
+        {
+          "id": "toRightFocus",
+          "label": "PF2",
+          "xExpression": "c-a*(exp(u)+exp(0-u))/2",
+          "yExpression": "0-b*(exp(u)-exp(0-u))/2",
+          "scale": 1,
+          "unit": "长度单位",
+          "bodyId": "hyperbolaRight",
+          "display": "distance",
+          "labelMode": "value"
+        },
+        {
+          "id": "toLeftFocus",
+          "label": "PF1",
+          "xExpression": "0-c-a*(exp(u)+exp(0-u))/2",
+          "yExpression": "0-b*(exp(u)-exp(0-u))/2",
+          "scale": 1,
+          "unit": "长度单位",
+          "bodyId": "hyperbolaRight",
+          "display": "distance",
+          "labelMode": "value"
+        }
+      ],
+      "constraints": []
+    },
+    "reason": "用两条安全参数轨迹描出双曲线，并用固定焦点、距离直线及实时测量量验证焦点距离差。"
+  }
+}

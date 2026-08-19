@@ -1,0 +1,18 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-0.9",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "椭圆焦点距离和",
+    "templateId": "math.conic.ellipse-focus-sum",
+    "parameterOverrides": {
+      "majorAxis": 14,
+      "minorAxis": 8
+    },
+    "reason": "拖动椭圆上的点，验证它到两个焦点的距离之和等于长轴。"
+  }
+}

@@ -116,7 +116,9 @@
               "yExpression": { "$ref": "#/$defs/expression" },
               "scale": { "type": "number", "minimum": 0.01, "maximum": 20 },
               "unit": { "type": "string", "minLength": 1, "maxLength": 16 },
-              "bodyId": { "$ref": "#/$defs/dynamicId" }
+              "bodyId": { "$ref": "#/$defs/dynamicId" },
+              "display": { "enum": ["arrow", "distance"] },
+              "labelMode": { "enum": ["full", "value"] }
             }
           }
         },

@@ -1,0 +1,92 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-0.9",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "physics",
+    "topic": "水平弹簧振子",
+    "templateId": "experiment.motion.point-2d",
+    "parameterOverrides": {},
+    "experimentSpec": {
+      "durationExpression": "4*pi*sqrt(m/k)",
+      "xExpression": "A*cos(omega*t)",
+      "yExpression": "1",
+      "bodyId": "mass",
+      "bodyLabel": "滑块",
+      "formula": "x=A cos(sqrt(k/m)t)",
+      "conclusion": "理想弹簧振子的周期由质量和劲度系数决定，总机械能保持不变。",
+      "parameters": [
+        {
+          "id": "A",
+          "label": "振幅",
+          "value": 2,
+          "min": 0.5,
+          "max": 4,
+          "step": 0.1
+        },
+        {
+          "id": "m",
+          "label": "滑块质量",
+          "value": 1,
+          "min": 0.5,
+          "max": 5,
+          "step": 0.1
+        },
+        {
+          "id": "k",
+          "label": "弹簧劲度系数",
+          "value": 4,
+          "min": 0.5,
+          "max": 20,
+          "step": 0.5
+        }
+      ],
+      "metrics": [
+        {
+          "id": "omega",
+          "label": "角频率",
+          "expression": "sqrt(k/m)",
+          "unit": "rad/s"
+        },
+        {
+          "id": "velocity",
+          "label": "速度",
+          "expression": "0-A*omega*sin(omega*t)",
+          "unit": "m/s"
+        },
+        {
+          "id": "energy",
+          "label": "机械能",
+          "expression": "0.5*k*(A*cos(omega*t))^2+0.5*m*velocity^2",
+          "unit": "J"
+        }
+      ],
+      "vectors": [
+        {
+          "id": "velocityVector",
+          "label": "速度",
+          "xExpression": "velocity",
+          "yExpression": "0",
+          "scale": 0.25,
+          "unit": "m/s",
+          "bodyId": "mass"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "spring",
+          "label": "水平弹簧",
+          "type": "spring",
+          "bodyId": "mass",
+          "anchorXExpression": "0",
+          "anchorYExpression": "1",
+          "restLengthExpression": "1"
+        }
+      ]
+    },
+    "reason": "用弹簧约束、速度和能量指标演示简谐振动。"
+  }
+}

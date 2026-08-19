@@ -4,6 +4,7 @@ import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   GENERATION_API_VERSION,
+  editLessonPlan,
   generateLessonPlan,
   publicModelStatus,
   repairLessonPlan,
@@ -52,9 +53,12 @@ async function handleApi(req, res, url) {
         'generic-function-2d',
         'time-experiment-point-2d',
         'time-experiment-vectors',
+        'time-experiment-distance-lines',
+        'time-experiment-label-modes',
         'time-experiment-multi-body',
         'time-experiment-constraints',
         'derived-metric-reuse',
+        'contextual-scene-edit',
       ],
       model: publicModelStatus(),
     })
@@ -74,13 +78,24 @@ async function handleApi(req, res, url) {
         return true
       }
       const correction = body.correction
-      const result = correction === undefined
-        ? await generateLessonPlan(prompt)
-        : await repairLessonPlan(
+      const edit = body.edit
+      const result = correction !== undefined
+        ? await repairLessonPlan(
             prompt,
             correction && typeof correction === 'object' ? correction.previousPlan : undefined,
             correction && typeof correction === 'object' ? correction.validationError : undefined,
+            {
+              basePlan: correction && typeof correction === 'object'
+                ? correction.basePlan
+                : undefined,
+            },
           )
+        : edit !== undefined
+          ? await editLessonPlan(
+              prompt,
+              edit && typeof edit === 'object' ? edit.basePlan : undefined,
+            )
+          : await generateLessonPlan(prompt)
       json(res, 200, result)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'MiniMax-M3 生成失败。'

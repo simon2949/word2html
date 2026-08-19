@@ -1,0 +1,98 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-0.9",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "physics",
+    "topic": "斜抛运动",
+    "templateId": "experiment.motion.point-2d",
+    "parameterOverrides": {},
+    "experimentSpec": {
+      "durationExpression": "(v0*sin(angle)+sqrt((v0*sin(angle))^2+2*g*h0))/g",
+      "xExpression": "v0*cos(angle)*t",
+      "yExpression": "max(0,h0+v0*sin(angle)*t-0.5*g*t^2)",
+      "bodyId": "projectile",
+      "bodyLabel": "抛射物",
+      "formula": "x=v0 cos(angle)t, y=h0+v0 sin(angle)t-gt^2/2",
+      "conclusion": "忽略空气阻力时，水平方向匀速，竖直方向做匀变速运动。",
+      "parameters": [
+        {
+          "id": "v0",
+          "label": "初速度",
+          "value": 14,
+          "min": 4,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "id": "angle",
+          "label": "发射角（弧度）",
+          "value": 0.75,
+          "min": 0.2,
+          "max": 1.3,
+          "step": 0.05
+        },
+        {
+          "id": "h0",
+          "label": "初始高度",
+          "value": 2,
+          "min": 0,
+          "max": 15,
+          "step": 0.5
+        },
+        {
+          "id": "g",
+          "label": "重力加速度",
+          "value": 9.8,
+          "min": 5,
+          "max": 15,
+          "step": 0.1
+        }
+      ],
+      "metrics": [
+        {
+          "id": "vx",
+          "label": "水平速度",
+          "expression": "v0*cos(angle)",
+          "unit": "m/s"
+        },
+        {
+          "id": "vy",
+          "label": "竖直速度",
+          "expression": "v0*sin(angle)-g*t",
+          "unit": "m/s"
+        },
+        {
+          "id": "speed",
+          "label": "速率",
+          "expression": "sqrt(vx^2+vy^2)",
+          "unit": "m/s"
+        }
+      ],
+      "vectors": [
+        {
+          "id": "velocity",
+          "label": "速度",
+          "xExpression": "vx",
+          "yExpression": "vy",
+          "scale": 0.15,
+          "unit": "m/s",
+          "bodyId": "projectile"
+        },
+        {
+          "id": "gravity",
+          "label": "重力加速度",
+          "xExpression": "0",
+          "yExpression": "0-g",
+          "scale": 0.18,
+          "unit": "m/s^2",
+          "bodyId": "projectile"
+        }
+      ]
+    },
+    "reason": "用参数化点运动比较初速度、发射角和重力加速度对轨迹的影响。"
+  }
+}

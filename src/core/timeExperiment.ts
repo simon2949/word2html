@@ -26,6 +26,8 @@ export interface TimeExperimentVectorSpec {
   scale: number
   unit: string
   bodyId?: string
+  display?: 'arrow' | 'distance'
+  labelMode?: 'full' | 'value'
 }
 
 export interface TimeExperimentConstraintSpec {
@@ -187,6 +189,12 @@ export function validateTimeExperimentSpec(spec: TimeExperimentSpec): string | n
     if (!Number.isFinite(vector.scale) || vector.scale < 0.01 || vector.scale > 20) {
       return `矢量 ${vector.label} 的显示比例必须在 0.01 到 20 之间。`
     }
+    if (vector.display !== undefined && vector.display !== 'arrow' && vector.display !== 'distance') {
+      return `矢量 ${vector.label} 的显示模式不合法。`
+    }
+    if (vector.labelMode !== undefined && vector.labelMode !== 'full' && vector.labelMode !== 'value') {
+      return `矢量 ${vector.label} 的标签模式不合法。`
+    }
     if (!bodyIds.has(vector.bodyId ?? bodies[0]!.id)) return `矢量 ${vector.label} 绑定了不存在的运动物体。`
   }
 
@@ -306,6 +314,8 @@ export function getTimeExperimentSpec(scene: LessonScene): TimeExperimentSpec {
         scale: Number(vector.bindings.scale),
         unit: vector.unit ?? '',
         bodyId: vector.anchorId?.replace(/^body\./, '') ?? bodyId,
+        display: vector.role === '几何距离' ? 'distance' : 'arrow',
+        labelMode: vector.bindings.labelMode === 'value' ? 'value' : 'full',
       })),
     constraints: scene.objects
       .filter((object) => object.kind === 'constraint')

@@ -113,6 +113,10 @@ describe('generic time experiment runtime', () => {
       ...freeFallSpec(),
       vectors: [{ ...freeFallSpec().vectors[0]!, yExpression: 'window(t)' }],
     })).toContain('不允许')
+    expect(validateTimeExperimentSpec({
+      ...freeFallSpec(),
+      vectors: [{ ...freeFallSpec().vectors[0]!, labelMode: 'hidden' as never }],
+    })).toContain('标签模式')
   })
 
   it('models two-body elastic collision with body-bound velocity vectors', () => {

@@ -99,7 +99,7 @@ describe('standalone HTML export', () => {
     expect(html).toContain('max(0,h0-0.5*g*t^2)')
     expect(html).toContain('vector.velocity')
     expect(html).toContain('current.vectors.forEach')
-    expect(html).toContain('矢量与绳/弹簧约束')
+    expect(html).toContain('辅助线、矢量与约束')
     expect(html).not.toContain('eval(')
     expect(html).not.toContain('new Function')
     expect(html).not.toContain('https://')
@@ -135,6 +135,31 @@ describe('standalone HTML export', () => {
     const runtime = scripts.at(-1)?.[1]
     expect(runtime).toBeTruthy()
     if (!runtime) throw new Error('missing standalone multi-body runtime')
+    expect(() => new Function(runtime)).not.toThrow()
+  })
+
+  it('exports geometric distance vectors as labelled straight segments', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'point', bodyLabel: 'P',
+      xExpression: 't', yExpression: '2', formula: 'PF=sqrt((3-t)^2+4)',
+      conclusion: '显示点到焦点的距离。', parameters: [], metrics: [], constraints: [],
+      vectors: [{
+        id: 'distance', label: 'PF', xExpression: '3-t', yExpression: '0-2',
+        scale: 1, unit: 'm', bodyId: 'point', display: 'distance', labelMode: 'value',
+      }],
+    }, { title: '几何距离', topic: '距离', subject: 'math', summary: '直线距离标注。' })
+    const html = exportSceneAsStandaloneHtml(scene)
+
+    expect(html).toContain('几何距离')
+    expect(html).toContain('data-vector-display')
+    expect(html).toContain("isDistance?length:Math.min(length,130)")
+    expect(html).toContain("labelMode==='value'")
+    expect(html).toContain('"labelMode":"value"')
+
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    const runtime = scripts.at(-1)?.[1]
+    expect(runtime).toBeTruthy()
+    if (!runtime) throw new Error('missing standalone distance runtime')
     expect(() => new Function(runtime)).not.toThrow()
   })
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Word2HTML 场景生成器"
+  short_description: "生成可校验、可导入、可复用并适配实验库的 K12 交互场景包"
+  default_prompt: "使用 $word2html-scene-author 生成一个可导入 Word2HTML 的交互教学场景包。"

@@ -4,6 +4,7 @@ import { QuadraticCanvas } from './components/QuadraticCanvas'
 import { GenericFunctionCanvas } from './components/GenericFunctionCanvas'
 import { TimeExperimentCanvas } from './components/TimeExperimentCanvas'
 import { SettingsPanel } from './components/SettingsPanel'
+import { LessonLibraryPanel } from './components/LessonLibraryPanel'
 import {
   getEllipseSnapshot,
   normalizeAngle,
@@ -39,9 +40,12 @@ import {
 } from './core/intentParser'
 import {
   assertSceneRendererSupported,
+  editSceneWithModel,
   GENERATION_API_VERSION,
   generateSceneWithModel,
   getModelServiceStatus,
+  lessonPlanFromScene,
+  type LessonPlan,
   type ModelServiceStatus,
 } from './core/modelGateway'
 import {
@@ -51,7 +55,16 @@ import {
   loadDraft,
   saveDraft,
 } from './core/storage'
-import { assertLessonScene, validateLessonScene } from './core/validateScene'
+import { validateLessonScene } from './core/validateScene'
+import { parseLessonImport } from './core/lessonPackage'
+import { describeLessonPlanChanges } from './core/lessonPlanDiff'
+import {
+  getOfficialLibraryEntries,
+  loadThirdPartyLibrary,
+  removeThirdPartyEntry,
+  saveThirdPartyScene,
+  type LessonLibraryEntry,
+} from './core/lessonLibrary'
 import { createEllipseScene } from './templates/ellipseTemplate'
 import type { LessonScene, SceneAppearance } from './types/lessonScene'
 import { isNumberParameter } from './types/lessonScene'
@@ -82,6 +95,28 @@ function templateCacheKey(prompt: string, templateId: string): string {
 
 function modelCacheKey(prompt: string, status: ModelServiceStatus): string {
   return `${normalizePrompt(prompt)}|model:${status.provider}:${status.model}|schema:0.1|plan:${GENERATION_API_VERSION}`
+}
+
+function compactHash(value: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function modelEditCacheKey(prompt: string, plan: LessonPlan, status: ModelServiceStatus): string {
+  const context = compactHash(JSON.stringify(plan))
+  return `${normalizePrompt(prompt)}|edit:${context}|model:${status.provider}:${status.model}|schema:0.1|plan:${GENERATION_API_VERSION}`
+}
+
+function applyCurrentAppearance(cached: LessonScene, current: LessonScene): LessonScene {
+  const next = structuredClone(cached)
+  next.appearance = structuredClone(current.appearance)
+  next.lineage.parentSceneId = current.id
+  next.lineage.updatedAt = new Date().toISOString()
+  return next
 }
 
 function safeFilename(title: string, extension: string): string {
@@ -116,6 +151,9 @@ export default function App() {
   const [experimentTime, setExperimentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [officialLibrary] = useState(() => getOfficialLibraryEntries())
+  const [thirdPartyLibrary, setThirdPartyLibrary] = useState(() => loadThirdPartyLibrary())
   const [parameterError, setParameterError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [modelStatus, setModelStatus] = useState<ModelServiceStatus>({
@@ -138,6 +176,7 @@ export default function App() {
   const quadraticScene = scene.templateRef.id === QUADRATIC_TEMPLATE_ID
   const genericFunctionScene = scene.templateRef.id === GENERIC_FUNCTION_TEMPLATE_ID
   const timeExperimentScene = scene.templateRef.id === TIME_EXPERIMENT_TEMPLATE_ID
+  const mathParameterTraceScene = timeExperimentScene && scene.metadata.subject === 'math'
   const ellipseSnapshot = useMemo(
     () => ellipseScene ? getEllipseSnapshot(scene, angle) : null,
     [angle, ellipseScene, scene],
@@ -356,7 +395,7 @@ export default function App() {
     })
   }
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (mode: 'create' | 'edit' = 'create') => {
     setIsGenerating(true)
     setParameterError(null)
     await Promise.resolve()
@@ -367,7 +406,7 @@ export default function App() {
         return
       }
 
-      if (route.kind === 'template') {
+      if (mode === 'create' && route.kind === 'template') {
         const templateId = route.templateId ?? 'unknown'
         const key = templateCacheKey(prompt, templateId)
         const cached = getCachedScene(key)
@@ -392,7 +431,10 @@ export default function App() {
         return
       }
 
-      const key = modelCacheKey(prompt, modelStatus)
+      const basePlan = mode === 'edit' ? lessonPlanFromScene(scene) : null
+      const key = basePlan
+        ? modelEditCacheKey(prompt, basePlan, modelStatus)
+        : modelCacheKey(prompt, modelStatus)
       const cached = getCachedScene(key)
       let cachedRendererSupported = false
       if (cached) {
@@ -404,19 +446,29 @@ export default function App() {
         }
       }
       if (cached && cachedRendererSupported) {
-        if (commitScene(cached, {
-          tone: 'success',
-          title: '已精确复用模型生成场景',
-          detail: '相同描述已通过本地缓存恢复 · 未调用大模型 · AI token：0',
-          changes: ['复用了此前已经通过协议、安全、数学和渲染能力校验的场景。'],
-        })) {
-          setAngle(pointAngle(cached))
-          setExperimentTime(0)
-          setTrailAngles([])
-          setIsPlaying(false)
-          setZoom(1)
+        const next = mode === 'edit' ? applyCurrentAppearance(cached, scene) : cached
+        const cachedChanges = mode === 'edit' && basePlan
+          ? describeLessonPlanChanges(basePlan, lessonPlanFromScene(next))
+          : []
+        if (mode !== 'edit' || cachedChanges.length > 0) {
+          if (commitScene(next, {
+            tone: 'success',
+            title: mode === 'edit' ? '已精确复用场景修改' : '已精确复用模型生成场景',
+            detail: mode === 'edit'
+              ? '相同当前规划和修改要求已通过本地缓存恢复 · 未调用大模型 · AI token：0'
+              : '相同描述已通过本地缓存恢复 · 未调用大模型 · AI token：0',
+            changes: mode === 'edit'
+              ? cachedChanges
+              : ['复用了此前已经通过协议、安全、数学和渲染能力校验的场景。'],
+          })) {
+            setAngle(pointAngle(next))
+            setExperimentTime(0)
+            setTrailAngles([])
+            setIsPlaying(false)
+            setZoom(1)
+          }
+          return
         }
-        return
       }
 
       if (!modelStatus.reachable || !modelStatus.configured || !modelStatus.apiCompatible) {
@@ -432,7 +484,9 @@ export default function App() {
         return
       }
 
-      const generated = await generateSceneWithModel(prompt)
+      const generated = mode === 'edit'
+        ? await editSceneWithModel(prompt, scene)
+        : await generateSceneWithModel(prompt)
       const usageText = [
         generated.usage.modelCalls !== undefined ? `调用 ${generated.usage.modelCalls} 次` : null,
         generated.usage.inputTokens !== undefined ? `输入 ${generated.usage.inputTokens}` : null,
@@ -441,10 +495,15 @@ export default function App() {
       ].filter(Boolean).join(' / ')
       if (commitScene(generated.scene, {
         tone: 'success',
-        title: generated.usage.repaired
-          ? `${generated.provider?.model ?? 'MiniMax-M3'} 已自动纠错并创建场景`
-          : `${generated.provider?.model ?? 'MiniMax-M3'} 已规划并创建场景`,
-        detail: usageText ? `Token：${usageText}` : '生成服务未返回 token 统计。',
+        title: mode === 'edit'
+          ? generated.usage.repaired
+            ? `${generated.provider?.model ?? 'MiniMax-M3'} 已纠错并修改当前场景`
+            : `${generated.provider?.model ?? 'MiniMax-M3'} 已修改当前场景`
+          : generated.usage.repaired
+            ? `${generated.provider?.model ?? 'MiniMax-M3'} 已自动纠错并创建场景`
+            : `${generated.provider?.model ?? 'MiniMax-M3'} 已规划并创建场景`,
+        detail: `${usageText ? `Token：${usageText}` : '生成服务未返回 token 统计。'}${mode === 'edit' ? ' · 已保留当前显示设置' : ''}`,
+        changes: mode === 'edit' ? generated.changes : undefined,
       })) {
         cacheScene(key, generated.scene)
         setAngle(pointAngle(generated.scene))
@@ -513,21 +572,33 @@ export default function App() {
   const handleImport = async (file: File) => {
     try {
       const value: unknown = JSON.parse(await file.text())
-      assertLessonScene(value)
-      assertSceneRendererSupported(value)
-      const next = structuredClone(value)
-      next.lineage.source = 'imported'
-      next.lineage.updatedAt = new Date().toISOString()
+      const imported = parseLessonImport(value)
+      const next = imported.scene
       if (commitScene(next, {
         tone: 'success',
         title: '场景导入成功',
-        detail: '协议、引用、表达式和数学不变量均已通过校验。',
+        detail: '协议、表达式、教学不变量和渲染能力均已通过校验。',
       })) {
         setAngle(pointAngle(next))
         setExperimentTime(0)
         setTrailAngles([])
         setIsPlaying(false)
         setZoom(1)
+        try {
+          saveThirdPartyScene(next, file.name)
+          setThirdPartyLibrary(loadThirdPartyLibrary())
+          setStatus({
+            tone: 'success',
+            title: '场景导入成功并已加入第三方库',
+            detail: `${imported.sourceFormat === 'lesson-package' ? '紧凑场景包' : 'LessonScene 文件'}已通过运行校验；内容标记为待管理员审核。`,
+          })
+        } catch {
+          setStatus({
+            tone: 'warning',
+            title: '场景已导入，但第三方库保存失败',
+            detail: '浏览器可能限制了本地存储；当前场景仍可正常使用。',
+          })
+        }
       }
     } catch (error) {
       setStatus({
@@ -538,6 +609,36 @@ export default function App() {
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const closeLibrary = useCallback(() => setLibraryOpen(false), [])
+
+  const handleLibraryLoad = (entry: LessonLibraryEntry) => {
+    const next = structuredClone(entry.scene)
+    if (commitScene(next, {
+      tone: 'success',
+      title: `已从${entry.source === 'official' ? '官方库' : '第三方库'}打开场景`,
+      detail: entry.reviewStatus === 'pending'
+        ? '该文件已通过运行校验，但教学内容仍待管理员审核。'
+        : '场景已通过对应目录的审核流程，可在右侧继续修改参数和显示效果。',
+    })) {
+      setAngle(pointAngle(next))
+      setExperimentTime(0)
+      setTrailAngles([])
+      setIsPlaying(false)
+      setZoom(1)
+      setParameterError(null)
+      setLibraryOpen(false)
+    }
+  }
+
+  const handleRemoveThirdParty = (id: string) => {
+    setThirdPartyLibrary(removeThirdPartyEntry(id))
+    setStatus({
+      tone: 'neutral',
+      title: '已从本地第三方库移除',
+      detail: '只删除了此设备中的库记录，当前正在展示的场景不受影响。',
+    })
   }
 
   const exportJson = () => {
@@ -585,6 +686,7 @@ export default function App() {
           <button className="icon-text-button" type="button" onClick={redo} disabled={history.future.length === 0} title="重做">
             <span aria-hidden="true">↷</span><b>重做</b>
           </button>
+          <button className="secondary-button library-button" type="button" onClick={() => setLibraryOpen(true)}>实验库</button>
           <button className="secondary-button" type="button" onClick={() => fileInputRef.current?.click()}>导入</button>
           <div className="export-actions">
             <button className="secondary-button" type="button" onClick={exportJson}>场景数据</button>
@@ -599,7 +701,7 @@ export default function App() {
           <div className="prompt-heading">
             <span className="eyebrow">自然语言创建</span>
             <h1>描述你想展示的内容</h1>
-            <p>支持审核模板与安全二维函数；参数和显示修改均在本地完成。</p>
+            <p>可生成新场景，也可让模型基于当前场景修改结构；参数和纯显示设置仍在右侧本地完成。</p>
           </div>
 
           <div className="prompt-box">
@@ -611,9 +713,14 @@ export default function App() {
             />
             <div className="prompt-footer">
               <span>{prompt.length} 字</span>
-              <button className="generate-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating || !prompt.trim()}>
-                <span aria-hidden="true">✦</span>{isGenerating ? '正在生成…' : '分析并生成'}
-              </button>
+              <div className="prompt-actions">
+                <button className="edit-scene-button" type="button" onClick={() => void handleGenerate('edit')} disabled={isGenerating || !prompt.trim()}>
+                  <span aria-hidden="true">↻</span>{isGenerating ? '处理中…' : '修改当前'}
+                </button>
+                <button className="generate-button" type="button" onClick={() => void handleGenerate('create')} disabled={isGenerating || !prompt.trim()}>
+                  <span aria-hidden="true">✦</span>{isGenerating ? '处理中…' : '生成新场景'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -710,9 +817,9 @@ export default function App() {
             <div className="invariant-status">
               <span className="invariant-check">✓</span>
               <div>
-                <strong>{timeExperimentScene ? '时间状态有效' : genericFunctionScene ? '函数场景有效' : quadraticScene ? '顶点关系成立' : '不变量成立'}</strong>
+                <strong>{mathParameterTraceScene ? '参数轨迹有效' : timeExperimentScene ? '时间状态有效' : genericFunctionScene ? '函数场景有效' : quadraticScene ? '顶点关系成立' : '不变量成立'}</strong>
                 <small>{timeExperimentScene
-                  ? `已校验 0–${timeExperimentSnapshot?.duration.toFixed(2) ?? '0.00'} s`
+                  ? `已校验 ${mathParameterTraceScene ? 't = ' : ''}0–${timeExperimentSnapshot?.duration.toFixed(2) ?? '0.00'}${mathParameterTraceScene ? '' : ' s'}`
                   : `当前数值误差 ${(ellipseSnapshot?.invariantError ?? quadraticSnapshot?.invariantError ?? 0).toExponential(1)}`}</small>
               </div>
             </div>
@@ -727,6 +834,15 @@ export default function App() {
           error={parameterError}
         />
       </main>
+
+      <LessonLibraryPanel
+        open={libraryOpen}
+        officialEntries={officialLibrary}
+        thirdPartyEntries={thirdPartyLibrary}
+        onClose={closeLibrary}
+        onLoad={handleLibraryLoad}
+        onRemoveThirdParty={handleRemoveThirdParty}
+      />
     </div>
   )
 }

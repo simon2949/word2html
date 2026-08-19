@@ -106,7 +106,8 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
     const rawDy = rawTip.y - anchor.y
     const rawLength = Math.hypot(rawDx, rawDy)
     if (rawLength < 0.75) return null
-    const displayLength = Math.min(rawLength, 130)
+    const isDistance = vector.display === 'distance'
+    const displayLength = isDistance ? rawLength : Math.min(rawLength, 130)
     const ux = rawDx / rawLength
     const uy = rawDy / rawLength
     const tip = { x: anchor.x + ux * displayLength, y: anchor.y + uy * displayLength }
@@ -114,15 +115,22 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
     const headWidth = headLength * 0.48
     const base = { x: tip.x - ux * headLength, y: tip.y - uy * headLength }
     const perpendicular = { x: -uy, y: ux }
-    const color = VECTOR_COLORS[index % VECTOR_COLORS.length]!
+    const color = isDistance ? appearance.helperColor : VECTOR_COLORS[index % VECTOR_COLORS.length]!
+    const labelBase = isDistance
+      ? { x: (anchor.x + tip.x) / 2, y: (anchor.y + tip.y) / 2 }
+      : tip
     return {
       ...vector,
+      isDistance,
+      displayLabel: vector.labelMode === 'value'
+        ? vector.magnitude.toFixed(2)
+        : [vector.label, vector.magnitude.toFixed(2), vector.unit].filter(Boolean).join(' '),
       color,
       anchor,
       tip,
       head: `${tip.x},${tip.y} ${base.x + perpendicular.x * headWidth},${base.y + perpendicular.y * headWidth} ${base.x - perpendicular.x * headWidth},${base.y - perpendicular.y * headWidth}`,
-      labelX: Math.min(SVG_WIDTH - 10, Math.max(10, tip.x + perpendicular.x * (16 + index * 4))),
-      labelY: Math.min(SVG_HEIGHT - 8, Math.max(15, tip.y + perpendicular.y * (16 + index * 4))),
+      labelX: Math.min(SVG_WIDTH - 10, Math.max(10, labelBase.x + perpendicular.x * (16 + index * 4))),
+      labelY: Math.min(SVG_HEIGHT - 8, Math.max(15, labelBase.y + perpendicular.y * (16 + index * 4))),
       textAnchor: perpendicular.x < -0.2 ? 'end' as const : 'start' as const,
     }
   }).filter((vector): vector is NonNullable<typeof vector> => vector !== null)
@@ -241,12 +249,12 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
               </g>
             ))}
             {appearance.showHelperLines && vectors.map((vector) => (
-              <g key={vector.id}>
+              <g key={vector.id} data-vector-display={vector.isDistance ? 'distance' : 'arrow'}>
                 <line
                   x1={vector.anchor.x} y1={vector.anchor.y} x2={vector.tip.x} y2={vector.tip.y}
                   stroke={vector.color} strokeWidth="3" strokeLinecap="round"
                 />
-                <polygon points={vector.head} fill={vector.color} />
+                {!vector.isDistance && <polygon points={vector.head} fill={vector.color} />}
               </g>
             ))}
             {bodies.map((body) => (
@@ -265,7 +273,7 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
               fill={vector.color} fontSize={12 * appearance.fontScale}
               fontWeight="750" textAnchor={vector.textAnchor}
             >
-              {vector.label} {vector.magnitude.toFixed(2)} {vector.unit}
+              {vector.displayLabel}
             </text>
           ))}
 
@@ -285,7 +293,7 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
               key={`body-label-${body.id}`} x={body.point.x + 17} y={body.point.y - 15 - index * 3}
               fill={body.color || textColor} fontSize={14 * appearance.fontScale} fontWeight="750"
             >
-              {body.label} ({body.x.toFixed(2)}, {body.y.toFixed(2)})
+              {body.label}({body.x.toFixed(2)}, {body.y.toFixed(2)})
             </text>
           ))}
         </svg>

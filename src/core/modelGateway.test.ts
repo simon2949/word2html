@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isNumberParameter } from '../types/lessonScene'
 import {
+  editSceneWithModel,
   generateSceneWithModel,
   instantiateLessonPlan,
+  lessonPlanFromScene,
   type LessonPlan,
 } from './modelGateway'
 
@@ -148,6 +150,22 @@ describe('LessonPlan instantiation', () => {
     expect(isNumberParameter(scene.parameters.h0) && scene.parameters.h0.value).toBe(20)
   })
 
+  it('reconstructs an editable compact plan from the current scene', () => {
+    const scene = instantiateLessonPlan(timeExperimentPlan())
+    const vector = scene.objects.find((object) => object.id === 'vector.velocity')
+    if (!vector) throw new Error('missing vector')
+    vector.role = '几何距离'
+    vector.bindings.labelMode = 'value'
+
+    const plan = lessonPlanFromScene(scene)
+
+    expect(plan.templateId).toBe('experiment.motion.point-2d')
+    expect(plan.experimentSpec?.vectors[0]).toMatchObject({
+      id: 'velocity', display: 'distance', labelMode: 'value', bodyId: 'primary',
+    })
+    expect(plan.experimentSpec?.parameters[0]?.value).toBe(20)
+  })
+
   it('instantiates the normalized two-pendulum plan returned by the model', () => {
     const plan: LessonPlan = {
       schemaVersion: '0.1', status: 'matched', subject: 'physics', topic: '双钟摆运动',
@@ -191,7 +209,7 @@ describe('LessonPlan instantiation', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        apiVersion: 'lesson-plan-0.6',
+        apiVersion: 'lesson-plan-0.9',
         plan: matchedPlan(),
         usage: { inputTokens: 70, cachedInputTokens: 20, outputTokens: 85 },
         provider: { name: 'MiniMax', model: 'MiniMax-M3' },
@@ -203,6 +221,79 @@ describe('LessonPlan instantiation', () => {
     expect(result.scene.templateRef.id).toBe('math.conic.ellipse-focus-sum')
     expect(result.usage.outputTokens).toBe(85)
     expect(result.plan.parameterOverrides).toEqual({ majorAxis: 12, minorAxis: 8 })
+  })
+
+  it('edits against the current plan and preserves local appearance settings', async () => {
+    const current = instantiateLessonPlan(timeExperimentPlan())
+    current.appearance.helperColor = '#123456'
+    const editedPlan: LessonPlan = {
+      ...timeExperimentPlan(),
+      experimentSpec: {
+        ...timeExperimentPlan().experimentSpec!,
+        vectors: timeExperimentPlan().experimentSpec!.vectors.map((vector) => ({
+          ...vector,
+          display: 'distance' as const,
+          labelMode: 'value' as const,
+          scale: 1,
+        })),
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiVersion: 'lesson-plan-0.9',
+        plan: editedPlan,
+        usage: { inputTokens: 180, outputTokens: 120, modelCalls: 1 },
+        provider: { name: 'MiniMax', model: 'MiniMax-M3' },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await editSceneWithModel('把现有矢量改成距离直线并标注长度', current)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined
+    if (typeof request?.body !== 'string') throw new Error('missing request body')
+    const body = JSON.parse(request.body)
+    expect(body.edit.basePlan.templateId).toBe('experiment.motion.point-2d')
+    expect(body.edit.basePlan.experimentSpec.vectors[0].display).toBe('arrow')
+    expect(result.plan.experimentSpec?.vectors[0]?.display).toBe('distance')
+    expect(result.plan.experimentSpec?.vectors[0]?.labelMode).toBe('value')
+    expect(result.changes).toContain('矢量/距离 velocity：线型 箭头 → 距离直线；标注 标签、数值和单位 → 仅数值；比例 0.1 → 1')
+    expect(result.scene.appearance.helperColor).toBe('#123456')
+    expect(result.scene.lineage.parentSceneId).toBe(current.id)
+  })
+
+  it('repairs a contextual response that makes no semantic change', async () => {
+    const current = instantiateLessonPlan(timeExperimentPlan())
+    const basePlan = lessonPlanFromScene(current)
+    const editedPlan = structuredClone(basePlan)
+    editedPlan.experimentSpec!.bodyLabel = '落体 P'
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          apiVersion: 'lesson-plan-0.9', plan: basePlan,
+          usage: { inputTokens: 120, outputTokens: 80, modelCalls: 1 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          apiVersion: 'lesson-plan-0.9', plan: editedPlan,
+          usage: { inputTokens: 140, outputTokens: 90, modelCalls: 1, repaired: true },
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await editSceneWithModel('把运动点标签简化为落体 P', current)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const repairRequest = fetchMock.mock.calls[1]?.[1] as RequestInit | undefined
+    if (typeof repairRequest?.body !== 'string') throw new Error('missing repair request body')
+    expect(JSON.parse(repairRequest.body).correction.validationError).toContain('没有对当前场景产生')
+    expect(result.changes).toEqual(['主运动点标签：运动物体 → 落体 P'])
+    expect(result.usage.modelCalls).toBe(2)
   })
 
   it('requests one model repair when browser physics validation rejects the first plan', async () => {
@@ -220,7 +311,7 @@ describe('LessonPlan instantiation', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          apiVersion: 'lesson-plan-0.6', plan: invalidRopePlan,
+          apiVersion: 'lesson-plan-0.9', plan: invalidRopePlan,
           usage: { inputTokens: 100, cachedInputTokens: 20, outputTokens: 80, modelCalls: 1, repaired: false },
           provider: { name: 'MiniMax', model: 'MiniMax-M3' },
         }),
@@ -228,7 +319,7 @@ describe('LessonPlan instantiation', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          apiVersion: 'lesson-plan-0.6', plan: timeExperimentPlan(),
+          apiVersion: 'lesson-plan-0.9', plan: timeExperimentPlan(),
           usage: { inputTokens: 140, cachedInputTokens: 30, outputTokens: 70, modelCalls: 1, repaired: true },
           provider: { name: 'MiniMax', model: 'MiniMax-M3' },
         }),
@@ -263,7 +354,7 @@ describe('LessonPlan instantiation', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        apiVersion: 'lesson-plan-0.6', plan: invalidRopePlan,
+        apiVersion: 'lesson-plan-0.9', plan: invalidRopePlan,
         usage: { inputTokens: 220, outputTokens: 140, modelCalls: 2, repaired: true },
       }),
     })

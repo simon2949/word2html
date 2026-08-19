@@ -12,10 +12,12 @@ import {
 } from './quadratic'
 import {
   GENERIC_FUNCTION_TEMPLATE_ID,
+  getGenericFunctionSpec,
   validateGenericFunctionSpec,
   type GenericFunctionSpec,
 } from './genericFunction'
 import {
+  getTimeExperimentSpec,
   TIME_EXPERIMENT_TEMPLATE_ID,
   validateTimeExperimentSpec,
   type TimeExperimentSpec,
@@ -23,10 +25,11 @@ import {
 import type { LessonScene, Subject } from '../types/lessonScene'
 import { isNumberParameter } from '../types/lessonScene'
 import { assertLessonScene } from './validateScene'
+import { describeLessonPlanChanges } from './lessonPlanDiff'
 
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 const validatePlanSchema = ajv.compile(lessonPlanSchema)
-export const GENERATION_API_VERSION = 'lesson-plan-0.6'
+export const GENERATION_API_VERSION = 'lesson-plan-0.9'
 
 export interface LessonPlan {
   schemaVersion: '0.1'
@@ -58,6 +61,7 @@ export interface ModelGenerationResult {
   scene: LessonScene
   plan: LessonPlan
   usage: ModelUsage
+  changes?: string[]
   provider?: {
     name: string
     model: string
@@ -123,7 +127,9 @@ export function assertLessonPlan(value: unknown): asserts value is LessonPlan {
     throw new Error('非通用函数计划不能包含函数规格。')
   }
   if (plan.templateId === TIME_EXPERIMENT_TEMPLATE_ID) {
-    if (plan.subject !== 'physics') throw new Error('二维点运动实验必须归类为物理。')
+    if (plan.subject !== 'physics' && plan.subject !== 'math') {
+      throw new Error('二维参数轨迹运行时只支持数学或物理。')
+    }
     if (Object.keys(plan.parameterOverrides).length > 0) {
       throw new Error('时间实验不能包含模板参数覆盖。')
     }
@@ -207,6 +213,110 @@ export function instantiateLessonPlan(plan: LessonPlan): LessonScene {
   }
   assertLessonScene(scene)
   return scene
+}
+
+function sceneReason(scene: LessonScene): string {
+  const summary = scene.metadata.summary.trim()
+  return (summary || '基于当前已校验场景继续编辑。').slice(0, 240)
+}
+
+function sceneTopic(scene: LessonScene): string {
+  const topic = scene.metadata.topic.trim()
+  return (topic || scene.metadata.title.trim() || '当前教学场景').slice(0, 120)
+}
+
+/**
+ * Reconstruct the compact, safe planning representation from any installed
+ * renderer scene. This lets imports, library entries and locally adjusted
+ * parameter values all participate in contextual model edits.
+ */
+export function lessonPlanFromScene(scene: LessonScene): LessonPlan {
+  assertLessonScene(scene)
+  assertSceneRendererSupported(scene)
+  const common = {
+    schemaVersion: '0.1' as const,
+    status: 'matched' as const,
+    subject: scene.metadata.subject,
+    topic: sceneTopic(scene),
+    reason: sceneReason(scene),
+  }
+  let plan: LessonPlan
+  if (scene.templateRef.id === 'math.conic.ellipse-focus-sum') {
+    const major = scene.parameters.majorAxis
+    const minor = scene.parameters.minorAxis
+    if (!isNumberParameter(major) || !isNumberParameter(minor)) {
+      throw new Error('当前椭圆场景缺少可编辑的长轴或短轴参数。')
+    }
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: 'math.conic.ellipse-focus-sum',
+      parameterOverrides: { majorAxis: major.value, minorAxis: minor.value },
+    }
+  } else if (scene.templateRef.id === QUADRATIC_TEMPLATE_ID) {
+    const coefficientA = scene.parameters.coefficientA
+    const vertexH = scene.parameters.vertexH
+    const vertexK = scene.parameters.vertexK
+    if (
+      !isNumberParameter(coefficientA) ||
+      !isNumberParameter(vertexH) ||
+      !isNumberParameter(vertexK)
+    ) {
+      throw new Error('当前二次函数场景缺少 a、h 或 k 参数。')
+    }
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: QUADRATIC_TEMPLATE_ID,
+      parameterOverrides: {
+        coefficientA: coefficientA.value,
+        vertexH: vertexH.value,
+        vertexK: vertexK.value,
+      },
+    }
+  } else if (scene.templateRef.id === GENERIC_FUNCTION_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: GENERIC_FUNCTION_TEMPLATE_ID,
+      parameterOverrides: {},
+      functionSpec: getGenericFunctionSpec(scene),
+    }
+  } else if (scene.templateRef.id === TIME_EXPERIMENT_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      templateId: TIME_EXPERIMENT_TEMPLATE_ID,
+      parameterOverrides: {},
+      experimentSpec: getTimeExperimentSpec(scene),
+    }
+  } else {
+    throw new Error(`当前场景不能转换为可编辑规划：${scene.templateRef.id}`)
+  }
+  assertLessonPlan(plan)
+  return plan
+}
+
+function assertContextualEditPlan(basePlan: LessonPlan, editedPlan: LessonPlan): void {
+  if (editedPlan.status !== 'matched') {
+    throw new Error('二次编辑不能把当前可用场景改为不支持状态。')
+  }
+  if (editedPlan.templateId !== basePlan.templateId) {
+    throw new Error('二次编辑不能更换当前场景的运行模板；如需其他内容，请使用“生成新场景”。')
+  }
+  if (editedPlan.subject !== basePlan.subject) {
+    throw new Error('二次编辑不能改变当前场景的学科分类。')
+  }
+}
+
+function instantiateContextualEdit(plan: LessonPlan, basePlan: LessonPlan, currentScene: LessonScene): LessonScene {
+  assertLessonPlan(plan)
+  assertContextualEditPlan(basePlan, plan)
+  const next = instantiateLessonPlan(plan)
+  next.appearance = structuredClone(currentScene.appearance)
+  next.lineage.parentSceneId = currentScene.id
+  next.lineage.updatedAt = new Date().toISOString()
+  assertLessonScene(next)
+  return next
 }
 
 export async function getModelServiceStatus(): Promise<ModelServiceStatus> {
@@ -334,6 +444,74 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
     } catch (repairError) {
       const message = repairError instanceof Error ? repairError.message : '浏览器本地场景校验失败。'
       throw new Error(`MiniMax 自动纠错后场景仍无效：${message}`)
+    }
+  }
+}
+
+export async function editSceneWithModel(
+  instruction: string,
+  currentScene: LessonScene,
+): Promise<ModelGenerationResult> {
+  const endpoint = import.meta.env.VITE_SCENE_GENERATION_ENDPOINT || '/api/generate'
+  const basePlan = lessonPlanFromScene(currentScene)
+  const first = await postGenerationRequest(endpoint, {
+    prompt: instruction,
+    schemaVersion: '0.1',
+    locale: 'zh-CN',
+    edit: { basePlan },
+  })
+  try {
+    assertLessonPlan(first.plan)
+    const changes = describeLessonPlanChanges(basePlan, first.plan)
+    if (changes.length === 0) throw new Error('模型没有对当前场景产生可应用的修改。请更明确地描述要改变的对象或标注。')
+    return {
+      scene: instantiateContextualEdit(first.plan, basePlan, currentScene),
+      plan: first.plan,
+      usage: first.usage ?? {},
+      changes,
+      provider: providerFromPayload(first),
+    }
+  } catch (error) {
+    const validationError = error instanceof Error ? error.message : '浏览器本地场景校验失败。'
+    const modelCalls = first.usage?.modelCalls
+    if (modelCalls !== 1 || !first.plan || typeof first.plan !== 'object') {
+      if (modelCalls !== undefined && modelCalls >= 2) {
+        throw new Error(`MiniMax 自动纠错后二次编辑仍无效：${validationError}`)
+      }
+      throw error
+    }
+    const repair = await postGenerationRequest(endpoint, {
+      prompt: instruction,
+      schemaVersion: '0.1',
+      locale: 'zh-CN',
+      correction: {
+        basePlan,
+        previousPlan: first.plan,
+        validationError: validationError.slice(0, 2400),
+      },
+    })
+    try {
+      assertLessonPlan(repair.plan)
+      const changes = describeLessonPlanChanges(basePlan, repair.plan)
+      if (changes.length === 0) throw new Error('模型纠错后仍未对当前场景产生可应用的修改。')
+      const firstUsage = first.usage ?? {}
+      const repairUsage = repair.usage ?? {}
+      return {
+        scene: instantiateContextualEdit(repair.plan, basePlan, currentScene),
+        plan: repair.plan,
+        changes,
+        usage: {
+          inputTokens: usageSum(firstUsage.inputTokens, repairUsage.inputTokens),
+          cachedInputTokens: usageSum(firstUsage.cachedInputTokens, repairUsage.cachedInputTokens),
+          outputTokens: usageSum(firstUsage.outputTokens, repairUsage.outputTokens),
+          modelCalls: usageSum(firstUsage.modelCalls, repairUsage.modelCalls) ?? 2,
+          repaired: true,
+        },
+        provider: providerFromPayload(repair) ?? providerFromPayload(first),
+      }
+    } catch (repairError) {
+      const message = repairError instanceof Error ? repairError.message : '浏览器本地场景校验失败。'
+      throw new Error(`MiniMax 自动纠错后二次编辑仍无效：${message}`)
     }
   }
 }

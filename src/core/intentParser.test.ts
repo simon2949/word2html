@@ -24,6 +24,10 @@ describe('generation request router', () => {
   it('routes unsupported teaching content to the model gateway', () => {
     expect(routeGenerationRequest('模拟自由落体运动').kind).toBe('model')
   })
+
+  it('keeps structural follow-up instructions eligible for contextual model editing', () => {
+    expect(routeGenerationRequest('动点到两个焦点应该通过直线连接，并标注距离').kind).toBe('model')
+  })
 })
 
 describe('quadratic template generation', () => {

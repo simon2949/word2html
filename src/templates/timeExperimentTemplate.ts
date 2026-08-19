@@ -67,7 +67,7 @@ export function createTimeExperimentScene(
       ...spec.vectors.map((vector) => ({
         id: `vector.${vector.id}`,
         kind: 'vector' as const,
-        role: '力学矢量',
+        role: vector.display === 'distance' ? '几何距离' : '力学矢量',
         label: vector.label,
         unit: vector.unit,
         anchorId: `body.${vector.bodyId ?? primaryBodyId}`,
@@ -75,6 +75,7 @@ export function createTimeExperimentScene(
           xExpression: vector.xExpression,
           yExpression: vector.yExpression,
           scale: String(vector.scale),
+          labelMode: vector.labelMode ?? 'full',
         },
         visibleWhen: 'showHelperLines' as const,
       })),
