@@ -153,7 +153,7 @@ export function SettingsPanel({
             <h3>辅助内容</h3>
             <Toggle checked={scene.appearance.showAxes} label="坐标轴" onChange={(value) => onAppearanceChange('showAxes', value)} />
             <Toggle checked={scene.appearance.showGrid} label="背景网格" onChange={(value) => onAppearanceChange('showGrid', value)} />
-            {!genericFunction && <Toggle checked={scene.appearance.showHelperLines} label={timeExperiment ? '速度与加速度矢量' : quadratic ? '对称轴' : '焦点辅助线'} onChange={(value) => onAppearanceChange('showHelperLines', value)} />}
+            {!genericFunction && <Toggle checked={scene.appearance.showHelperLines} label={timeExperiment ? '矢量与绳/弹簧约束' : quadratic ? '对称轴' : '焦点辅助线'} onChange={(value) => onAppearanceChange('showHelperLines', value)} />}
             {ellipse && <Toggle checked={scene.appearance.showIndividualDistances} label="单段距离" onChange={(value) => onAppearanceChange('showIndividualDistances', value)} />}
             {ellipse && <Toggle checked={scene.appearance.showDistanceSum} label="距离和" onChange={(value) => onAppearanceChange('showDistanceSum', value)} />}
             {ellipse && <Toggle checked={scene.appearance.showFocusLabels} label="焦点标签" onChange={(value) => onAppearanceChange('showFocusLabels', value)} />}
@@ -164,9 +164,9 @@ export function SettingsPanel({
 
           <div className="settings-group">
             <h3>颜色</h3>
-            <label className="color-row"><span>{timeExperiment ? '运动轨迹' : genericFunction ? '函数曲线' : quadratic ? '抛物线' : '椭圆'}</span><input type="color" value={scene.appearance.curveColor} onChange={(event) => onAppearanceChange('curveColor', event.target.value)} /></label>
+            <label className="color-row"><span>{timeExperiment ? '主物体轨迹' : genericFunction ? '函数曲线' : quadratic ? '抛物线' : '椭圆'}</span><input type="color" value={scene.appearance.curveColor} onChange={(event) => onAppearanceChange('curveColor', event.target.value)} /></label>
             {ellipse && <label className="color-row"><span>焦点</span><input type="color" value={scene.appearance.focusColor} onChange={(event) => onAppearanceChange('focusColor', event.target.value)} /></label>}
-            {!genericFunction && <label className="color-row"><span>{timeExperiment ? '运动物体' : quadratic ? '顶点' : '动点'}</span><input type="color" value={scene.appearance.pointColor} onChange={(event) => onAppearanceChange('pointColor', event.target.value)} /></label>}
+            {!genericFunction && <label className="color-row"><span>{timeExperiment ? '主运动物体' : quadratic ? '顶点' : '动点'}</span><input type="color" value={scene.appearance.pointColor} onChange={(event) => onAppearanceChange('pointColor', event.target.value)} /></label>}
             {!genericFunction && <label className="color-row"><span>{timeExperiment ? '基准线' : quadratic ? '对称轴' : '辅助线'}</span><input type="color" value={scene.appearance.helperColor} onChange={(event) => onAppearanceChange('helperColor', event.target.value)} /></label>}
           </div>
 

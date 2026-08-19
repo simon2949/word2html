@@ -14,6 +14,12 @@ describe('safe math expression runtime', () => {
     expect(compileMathExpression('2^-2', []).evaluate({})).toBe(0.25)
   })
 
+  it('supports a deterministic step function for piecewise motion', () => {
+    const expression = compileMathExpression('step(t-2)', ['t'])
+    expect(expression.evaluate({ t: 1.99 })).toBe(0)
+    expect(expression.evaluate({ t: 2 })).toBe(1)
+  })
+
   it('rejects scripts, unknown variables, implicit multiplication and excessive nesting', () => {
     expect(() => compileMathExpression('window.alert(1)', ['x'])).toThrow()
     expect(() => compileMathExpression('unknown + 1', ['x'])).toThrow(/未知变量/)

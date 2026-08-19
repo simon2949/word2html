@@ -12,6 +12,9 @@ export function createTimeExperimentScene(
 ): LessonScene {
   const error = validateTimeExperimentSpec(spec)
   if (error) throw new Error(error)
+  const primaryBodyId = spec.bodyId ?? 'primary'
+  const primaryBodyLabel = spec.bodyLabel ?? '运动物体'
+  const primaryObjectId = `body.${primaryBodyId}`
   const parameters: LessonScene['parameters'] = {}
   for (const parameter of spec.parameters) {
     parameters[parameter.id] = {
@@ -23,7 +26,7 @@ export function createTimeExperimentScene(
   const scene: LessonScene = {
     schemaVersion: '0.1',
     id: `scene.time-experiment.${Date.now()}`,
-    templateRef: { id: TIME_EXPERIMENT_TEMPLATE_ID, version: 2 },
+    templateRef: { id: TIME_EXPERIMENT_TEMPLATE_ID, version: 4 },
     metadata: {
       title: metadata.title, subject: metadata.subject, topic: metadata.topic,
       gradeRange: 'K12', locale: 'zh-CN', summary: metadata.summary,
@@ -36,7 +39,7 @@ export function createTimeExperimentScene(
       { id: 'axes', kind: 'axes', role: '坐标轴', bindings: {}, visibleWhen: 'showAxes' },
       { id: 'ground', kind: 'ground-line', role: '地面或基准线', bindings: { y: '0' } },
       {
-        id: 'movingBody', kind: 'time-point', role: '随时间运动的对象',
+        id: primaryObjectId, kind: 'time-point', role: '随时间运动的对象', label: primaryBodyLabel,
         bindings: {
           durationExpression: spec.durationExpression,
           xExpression: spec.xExpression,
@@ -44,20 +47,48 @@ export function createTimeExperimentScene(
         },
       },
       {
-        id: 'motionTrail', kind: 'trail', role: '运动轨迹',
+        id: `trail.${primaryBodyId}`, kind: 'trail', role: '运动轨迹', label: primaryBodyLabel,
+        anchorId: primaryObjectId,
         bindings: { xExpression: spec.xExpression, yExpression: spec.yExpression },
         visibleWhen: 'showTrail',
       },
+      ...(spec.additionalBodies ?? []).flatMap((body) => {
+        const objectId = `body.${body.id}`
+        return [{
+          id: objectId, kind: 'time-point' as const, role: '附加运动对象', label: body.label,
+          bindings: { xExpression: body.xExpression, yExpression: body.yExpression },
+        }, {
+          id: `trail.${body.id}`, kind: 'trail' as const, role: '运动轨迹', label: body.label,
+          anchorId: objectId,
+          bindings: { xExpression: body.xExpression, yExpression: body.yExpression },
+          visibleWhen: 'showTrail' as const,
+        }]
+      }),
       ...spec.vectors.map((vector) => ({
         id: `vector.${vector.id}`,
         kind: 'vector' as const,
         role: '力学矢量',
         label: vector.label,
         unit: vector.unit,
+        anchorId: `body.${vector.bodyId ?? primaryBodyId}`,
         bindings: {
           xExpression: vector.xExpression,
           yExpression: vector.yExpression,
           scale: String(vector.scale),
+        },
+        visibleWhen: 'showHelperLines' as const,
+      })),
+      ...(spec.constraints ?? []).map((constraint) => ({
+        id: `constraint.${constraint.id}`,
+        kind: 'constraint' as const,
+        role: '物理约束',
+        label: constraint.label,
+        constraintType: constraint.type,
+        anchorId: `body.${constraint.bodyId}`,
+        bindings: {
+          anchorXExpression: constraint.anchorXExpression,
+          anchorYExpression: constraint.anchorYExpression,
+          restLengthExpression: constraint.restLengthExpression,
         },
         visibleWhen: 'showHelperLines' as const,
       })),
@@ -67,12 +98,12 @@ export function createTimeExperimentScene(
         id: `control.${parameter.id}`, label: parameter.label,
         type: 'slider' as const, target: parameter.id,
       })),
-      { id: 'play', label: '播放或暂停', type: 'button', target: 'movingBody' },
-      { id: 'reset', label: '恢复默认', type: 'button', target: 'movingBody' },
+      { id: 'play', label: '播放或暂停', type: 'button', target: primaryObjectId },
+      { id: 'reset', label: '恢复默认', type: 'button', target: primaryObjectId },
     ],
     interactions: [
-      { id: 'animateBody', trigger: 'animation', target: 'movingBody', action: 'play' },
-      { id: 'resetBody', trigger: 'reset', target: 'movingBody', action: 'reset' },
+      { id: 'animateBody', trigger: 'animation', target: primaryObjectId, action: 'play' },
+      { id: 'resetBody', trigger: 'reset', target: primaryObjectId, action: 'reset' },
     ],
     annotations: { formula: spec.formula, conclusion: spec.conclusion },
     invariants: [{
@@ -81,7 +112,7 @@ export function createTimeExperimentScene(
     }],
     appearance: {
       theme: 'light', showAxes: true, showGrid: true, showFocusLabels: false,
-      showPointLabel: true, showHelperLines: spec.vectors.length > 0, showIndividualDistances: false,
+      showPointLabel: true, showHelperLines: spec.vectors.length > 0 || (spec.constraints?.length ?? 0) > 0, showIndividualDistances: false,
       showDistanceSum: false, showFormula: true, showTrail: true,
       curveColor: '#5B5BD6', focusColor: '#E15C48', pointColor: '#E15C48',
       helperColor: '#64748B', lineWidth: 3, pointRadius: 8, fontScale: 1,
@@ -89,7 +120,7 @@ export function createTimeExperimentScene(
     },
     lineage: {
       source: 'model', matchLevel: 'new',
-      fingerprint: `time-point|${spec.xExpression}|${spec.yExpression}|${spec.durationExpression}|${spec.parameters.map((item) => item.id).join(',')}|${spec.vectors.map((item) => item.id).join(',')}|v2`.slice(0, 200),
+      fingerprint: `time-point|${spec.xExpression}|${spec.yExpression}|${spec.durationExpression}|${spec.parameters.map((item) => item.id).join(',')}|${(spec.additionalBodies ?? []).map((item) => item.id).join(',')}|${spec.vectors.map((item) => item.id).join(',')}|${(spec.constraints ?? []).map((item) => item.id).join(',')}|v4`.slice(0, 200),
       updatedAt: new Date().toISOString(),
     },
   }

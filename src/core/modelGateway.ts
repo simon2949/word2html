@@ -26,7 +26,7 @@ import { assertLessonScene } from './validateScene'
 
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 const validatePlanSchema = ajv.compile(lessonPlanSchema)
-export const GENERATION_API_VERSION = 'lesson-plan-0.3'
+export const GENERATION_API_VERSION = 'lesson-plan-0.6'
 
 export interface LessonPlan {
   schemaVersion: '0.1'
@@ -50,6 +50,8 @@ export interface ModelUsage {
   inputTokens?: number
   cachedInputTokens?: number
   outputTokens?: number
+  modelCalls?: number
+  repaired?: boolean
 }
 
 export interface ModelGenerationResult {
@@ -236,12 +238,18 @@ export async function getModelServiceStatus(): Promise<ModelServiceStatus> {
   }
 }
 
-export async function generateSceneWithModel(prompt: string): Promise<ModelGenerationResult> {
-  const endpoint = import.meta.env.VITE_SCENE_GENERATION_ENDPOINT || '/api/generate'
+interface GenerationPayload {
+  apiVersion?: string
+  plan?: unknown
+  usage?: ModelUsage
+  provider?: { name?: string; model?: string }
+}
+
+async function postGenerationRequest(endpoint: string, body: Record<string, unknown>): Promise<GenerationPayload> {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, schemaVersion: '0.1', locale: 'zh-CN' }),
+    body: JSON.stringify(body),
   })
   if (!response.ok) {
     let message = `大模型生成服务返回错误：${response.status}`
@@ -256,23 +264,76 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
 
   const payload: unknown = await response.json()
   if (!payload || typeof payload !== 'object') throw new Error('大模型生成服务返回了无效数据。')
-  const candidate = payload as {
-    apiVersion?: string
-    plan?: unknown
-    usage?: ModelUsage
-    provider?: { name?: string; model?: string }
-  }
+  const candidate = payload as GenerationPayload
   if (candidate.apiVersion !== GENERATION_API_VERSION) {
     throw new Error('生成服务仍在运行旧协议。请停止并重新执行 npm run dev，然后刷新浏览器。')
   }
-  assertLessonPlan(candidate.plan)
-  const scene = instantiateLessonPlan(candidate.plan)
-  return {
-    scene,
-    plan: candidate.plan,
-    usage: candidate.usage ?? {},
-    provider: candidate.provider?.name && candidate.provider.model
-      ? { name: candidate.provider.name, model: candidate.provider.model }
-      : undefined,
+  return candidate
+}
+
+function usageSum(...values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => Number.isFinite(value))
+  return finite.length > 0 ? finite.reduce((sum, value) => sum + value, 0) : undefined
+}
+
+function providerFromPayload(candidate: GenerationPayload) {
+  return candidate.provider?.name && candidate.provider.model
+    ? { name: candidate.provider.name, model: candidate.provider.model }
+    : undefined
+}
+
+export async function generateSceneWithModel(prompt: string): Promise<ModelGenerationResult> {
+  const endpoint = import.meta.env.VITE_SCENE_GENERATION_ENDPOINT || '/api/generate'
+  const first = await postGenerationRequest(endpoint, {
+    prompt, schemaVersion: '0.1', locale: 'zh-CN',
+  })
+  try {
+    assertLessonPlan(first.plan)
+    const scene = instantiateLessonPlan(first.plan)
+    return {
+      scene,
+      plan: first.plan,
+      usage: first.usage ?? {},
+      provider: providerFromPayload(first),
+    }
+  } catch (error) {
+    const validationError = error instanceof Error ? error.message : '浏览器本地场景校验失败。'
+    const modelCalls = first.usage?.modelCalls
+    if (modelCalls !== 1 || !first.plan || typeof first.plan !== 'object') {
+      if (modelCalls !== undefined && modelCalls >= 2) {
+        throw new Error(`MiniMax 自动纠错后场景仍无效：${validationError}`)
+      }
+      throw error
+    }
+    const repair = await postGenerationRequest(endpoint, {
+      prompt,
+      schemaVersion: '0.1',
+      locale: 'zh-CN',
+      correction: {
+        previousPlan: first.plan,
+        validationError: validationError.slice(0, 2400),
+      },
+    })
+    try {
+      assertLessonPlan(repair.plan)
+      const scene = instantiateLessonPlan(repair.plan)
+      const firstUsage = first.usage ?? {}
+      const repairUsage = repair.usage ?? {}
+      return {
+        scene,
+        plan: repair.plan,
+        usage: {
+          inputTokens: usageSum(firstUsage.inputTokens, repairUsage.inputTokens),
+          cachedInputTokens: usageSum(firstUsage.cachedInputTokens, repairUsage.cachedInputTokens),
+          outputTokens: usageSum(firstUsage.outputTokens, repairUsage.outputTokens),
+          modelCalls: usageSum(firstUsage.modelCalls, repairUsage.modelCalls) ?? 2,
+          repaired: true,
+        },
+        provider: providerFromPayload(repair) ?? providerFromPayload(first),
+      }
+    } catch (repairError) {
+      const message = repairError instanceof Error ? repairError.message : '浏览器本地场景校验失败。'
+      throw new Error(`MiniMax 自动纠错后场景仍无效：${message}`)
+    }
   }
 }

@@ -179,6 +179,15 @@ function semanticIssues(scene: LessonScene): SceneValidationIssue[] {
       })
     }
   }
+  for (const object of scene.objects) {
+    if (object.anchorId && !objectIds.has(object.anchorId)) {
+      issues.push({
+        path: `/objects/${object.id}/anchorId`,
+        message: `对象锚点不存在：${object.anchorId}`,
+        severity: 'error',
+      })
+    }
+  }
   for (const interaction of scene.interactions) {
     if (!objectIds.has(interaction.target)) {
       issues.push({

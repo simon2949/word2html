@@ -434,13 +434,16 @@ export default function App() {
 
       const generated = await generateSceneWithModel(prompt)
       const usageText = [
+        generated.usage.modelCalls !== undefined ? `调用 ${generated.usage.modelCalls} 次` : null,
         generated.usage.inputTokens !== undefined ? `输入 ${generated.usage.inputTokens}` : null,
         generated.usage.cachedInputTokens !== undefined ? `缓存 ${generated.usage.cachedInputTokens}` : null,
         generated.usage.outputTokens !== undefined ? `输出 ${generated.usage.outputTokens}` : null,
       ].filter(Boolean).join(' / ')
       if (commitScene(generated.scene, {
         tone: 'success',
-        title: `${generated.provider?.model ?? 'MiniMax-M3'} 已规划并创建场景`,
+        title: generated.usage.repaired
+          ? `${generated.provider?.model ?? 'MiniMax-M3'} 已自动纠错并创建场景`
+          : `${generated.provider?.model ?? 'MiniMax-M3'} 已规划并创建场景`,
         detail: usageText ? `Token：${usageText}` : '生成服务未返回 token 统计。',
       })) {
         cacheScene(key, generated.scene)

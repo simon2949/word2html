@@ -99,7 +99,7 @@ describe('standalone HTML export', () => {
     expect(html).toContain('max(0,h0-0.5*g*t^2)')
     expect(html).toContain('vector.velocity')
     expect(html).toContain('current.vectors.forEach')
-    expect(html).toContain('速度与加速度矢量')
+    expect(html).toContain('矢量与绳/弹簧约束')
     expect(html).not.toContain('eval(')
     expect(html).not.toContain('new Function')
     expect(html).not.toContain('https://')
@@ -108,6 +108,58 @@ describe('standalone HTML export', () => {
     const runtime = scripts.at(-1)?.[1]
     expect(runtime).toBeTruthy()
     if (!runtime) throw new Error('missing standalone time experiment runtime')
+    expect(() => new Function(runtime)).not.toThrow()
+  })
+
+  it('exports multiple bodies, independent trails, and anchored vectors', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'left', bodyLabel: '左球',
+      xExpression: '0-t', yExpression: '0',
+      formula: '双物体运动', conclusion: '两个物体独立运动。',
+      parameters: [], metrics: [],
+      additionalBodies: [{ id: 'right', label: '右球', xExpression: 't', yExpression: '0' }],
+      vectors: [{
+        id: 'rightVelocity', label: '右球速度', bodyId: 'right',
+        xExpression: '1', yExpression: '0', scale: 0.5, unit: 'm/s',
+      }],
+    }, { title: '双物体运动', topic: '多物体', subject: 'physics', summary: '观察两个物体。' })
+    const html = exportSceneAsStandaloneHtml(scene)
+
+    expect(html).toContain('body.left')
+    expect(html).toContain('body.right')
+    expect(html).toContain('bodySpecs.map')
+    expect(html).toContain('data-trail-id')
+    expect(html).toContain('vector.spec.anchorId')
+
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    const runtime = scripts.at(-1)?.[1]
+    expect(runtime).toBeTruthy()
+    if (!runtime) throw new Error('missing standalone multi-body runtime')
+    expect(() => new Function(runtime)).not.toThrow()
+  })
+
+  it('exports a spring constraint without external runtime dependencies', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'block', bodyLabel: '滑块',
+      xExpression: 'cos(t)', yExpression: '0', formula: 'x=cos(t)',
+      conclusion: '弹簧连接固定点和滑块。', parameters: [], metrics: [], vectors: [],
+      constraints: [{
+        id: 'spring', label: '弹簧', type: 'spring', bodyId: 'block',
+        anchorXExpression: '0-3', anchorYExpression: '0', restLengthExpression: '3',
+      }],
+    }, { title: '弹簧振子', topic: '简谐运动', subject: 'physics', summary: '观察弹簧约束。' })
+    const html = exportSceneAsStandaloneHtml(scene)
+
+    expect(html).toContain('constraint.spring')
+    expect(html).toContain('constraintEvals')
+    expect(html).toContain('springPoints')
+    expect(html).toContain('data-constraint-id')
+    expect(html).not.toContain('https://')
+
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    const runtime = scripts.at(-1)?.[1]
+    expect(runtime).toBeTruthy()
+    if (!runtime) throw new Error('missing standalone constraint runtime')
     expect(() => new Function(runtime)).not.toThrow()
   })
 })

@@ -22,12 +22,42 @@ const SVG_WIDTH = 900
 const SVG_HEIGHT = 590
 const PADDING = 24
 const VECTOR_COLORS = ['#087E8B', '#E08B2D', '#7C3AED', '#D13C64']
+const SECONDARY_BODY_COLORS = ['#3B82C4', '#8B5CF6', '#16A085']
+const SECONDARY_TRAIL_COLORS = ['#60A5FA', '#A78BFA', '#34D399']
+
+function springPolyline(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): string {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length < 2) return `${start.x},${start.y} ${end.x},${end.y}`
+  const ux = dx / length
+  const uy = dy / length
+  const px = -uy
+  const py = ux
+  const lead = Math.min(14, length * 0.16)
+  const amplitude = Math.min(8, Math.max(3, length * 0.055))
+  const turns = Math.max(5, Math.min(12, Math.round(length / 18)))
+  const points = [start, { x: start.x + ux * lead, y: start.y + uy * lead }]
+  for (let index = 1; index < turns * 2; index += 1) {
+    const distance = lead + (length - lead * 2) * index / (turns * 2)
+    const offset = index % 2 === 0 ? -amplitude : amplitude
+    points.push({
+      x: start.x + ux * distance + px * offset,
+      y: start.y + uy * distance + py * offset,
+    })
+  }
+  points.push({ x: end.x - ux * lead, y: end.y - uy * lead }, end)
+  return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')
+}
 
 export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvasProps) {
   const runtime = useMemo(() => createTimeExperimentRuntime(scene), [scene])
   const snapshot = useMemo(() => runtime.snapshot(time), [runtime, time])
-  const trail = useMemo(
-    () => snapshot.time > 0 ? runtime.sample(snapshot.time, 181) : [],
+  const trailSamples = useMemo(
+    () => snapshot.time > 0 ? runtime.sampleBodies(snapshot.time, 181) : [],
     [runtime, snapshot.time],
   )
   const effectiveViewport = useMemo(() => zoomViewport(scene.viewport, zoom), [scene.viewport, zoom])
@@ -38,7 +68,12 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
   const { appearance } = scene
   const { scale, xOffset, yOffset, contentWidth, contentHeight, viewport, toSvg } = transform
   const origin = toSvg({ x: 0, y: 0 })
-  const body = toSvg({ x: snapshot.x, y: snapshot.y })
+  const bodies = snapshot.bodies.map((body, index) => ({
+    ...body,
+    point: toSvg(body),
+    color: index === 0 ? appearance.pointColor : SECONDARY_BODY_COLORS[(index - 1) % SECONDARY_BODY_COLORS.length]!,
+    trailColor: index === 0 ? appearance.curveColor : SECONDARY_TRAIL_COLORS[(index - 1) % SECONDARY_TRAIL_COLORS.length]!,
+  }))
   const gridStep = squareGridStep(scale)
   const gridX = coordinateTicks(viewport.xMin, viewport.xMax, gridStep)
   const gridY = coordinateTicks(viewport.yMin, viewport.yMax, gridStep)
@@ -50,23 +85,31 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
   const textColor = dark ? '#E8EEF3' : '#36404A'
   const showXAxis = viewport.yMin <= 0 && viewport.yMax >= 0
   const showYAxis = viewport.xMin <= 0 && viewport.xMax >= 0
-  const trailPoints = trail.map((sample) => {
-    const point = toSvg(sample)
-    return `${point.x.toFixed(2)},${point.y.toFixed(2)}`
-  }).join(' ')
+  const trails = bodies.map((body) => ({
+    id: body.id,
+    color: body.trailColor,
+    points: trailSamples.map((sample) => {
+      const state = sample.bodies.find((item) => item.id === body.id)
+      if (!state) return ''
+      const point = toSvg(state)
+      return `${point.x.toFixed(2)},${point.y.toFixed(2)}`
+    }).filter(Boolean).join(' '),
+  }))
   const vectors = snapshot.vectors.map((vector, index) => {
+    const anchorBody = bodies.find((body) => body.id === vector.bodyId) ?? bodies[0]!
+    const anchor = anchorBody.point
     const rawTip = toSvg({
-      x: snapshot.x + vector.x * vector.scale,
-      y: snapshot.y + vector.y * vector.scale,
+      x: anchorBody.x + vector.x * vector.scale,
+      y: anchorBody.y + vector.y * vector.scale,
     })
-    const rawDx = rawTip.x - body.x
-    const rawDy = rawTip.y - body.y
+    const rawDx = rawTip.x - anchor.x
+    const rawDy = rawTip.y - anchor.y
     const rawLength = Math.hypot(rawDx, rawDy)
     if (rawLength < 0.75) return null
     const displayLength = Math.min(rawLength, 130)
     const ux = rawDx / rawLength
     const uy = rawDy / rawLength
-    const tip = { x: body.x + ux * displayLength, y: body.y + uy * displayLength }
+    const tip = { x: anchor.x + ux * displayLength, y: anchor.y + uy * displayLength }
     const headLength = Math.min(12, Math.max(8, displayLength * 0.22))
     const headWidth = headLength * 0.48
     const base = { x: tip.x - ux * headLength, y: tip.y - uy * headLength }
@@ -75,6 +118,7 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
     return {
       ...vector,
       color,
+      anchor,
       tip,
       head: `${tip.x},${tip.y} ${base.x + perpendicular.x * headWidth},${base.y + perpendicular.y * headWidth} ${base.x - perpendicular.x * headWidth},${base.y - perpendicular.y * headWidth}`,
       labelX: Math.min(SVG_WIDTH - 10, Math.max(10, tip.x + perpendicular.x * (16 + index * 4))),
@@ -82,6 +126,25 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
       textAnchor: perpendicular.x < -0.2 ? 'end' as const : 'start' as const,
     }
   }).filter((vector): vector is NonNullable<typeof vector> => vector !== null)
+  const constraints = snapshot.constraints.map((constraint, index) => {
+    const anchor = toSvg({ x: constraint.anchorX, y: constraint.anchorY })
+    const body = toSvg({ x: constraint.bodyX, y: constraint.bodyY })
+    const dx = body.x - anchor.x
+    const dy = body.y - anchor.y
+    const length = Math.hypot(dx, dy)
+    const perpendicular = length > 0 ? { x: -dy / length, y: dx / length } : { x: 0, y: -1 }
+    const color = constraint.type === 'spring' ? '#D97706' : appearance.helperColor
+    return {
+      ...constraint,
+      anchor,
+      body,
+      color,
+      points: springPolyline(anchor, body),
+      labelX: Math.min(SVG_WIDTH - 10, Math.max(10, (anchor.x + body.x) / 2 + perpendicular.x * (15 + index * 3))),
+      labelY: Math.min(SVG_HEIGHT - 8, Math.max(15, (anchor.y + body.y) / 2 + perpendicular.y * (15 + index * 3))),
+      textAnchor: perpendicular.x < -0.2 ? 'end' as const : 'start' as const,
+    }
+  })
 
   return (
     <div className="canvas-stack" data-theme={appearance.theme}>
@@ -97,11 +160,13 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
             <clipPath id="time-experiment-plot-clip">
               <rect x={xOffset} y={yOffset} width={contentWidth} height={contentHeight} />
             </clipPath>
-            <radialGradient id="time-experiment-body" cx="35%" cy="28%" r="72%">
-              <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.86" />
-              <stop offset="0.24" stopColor={appearance.pointColor} />
-              <stop offset="1" stopColor={appearance.pointColor} stopOpacity="0.72" />
-            </radialGradient>
+            {bodies.map((body) => (
+              <radialGradient key={body.id} id={`time-experiment-body-${body.id}`} cx="35%" cy="28%" r="72%">
+                <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.86" />
+                <stop offset="0.24" stopColor={body.color} />
+                <stop offset="1" stopColor={body.color} stopOpacity="0.72" />
+              </radialGradient>
+            ))}
           </defs>
           <rect width={SVG_WIDTH} height={SVG_HEIGHT} rx="22" fill={background} />
 
@@ -149,25 +214,49 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
                 stroke={appearance.helperColor} strokeWidth="5" opacity="0.72"
               />
             )}
-            {appearance.showTrail && trail.length > 1 && (
+            {appearance.showTrail && trailSamples.length > 1 && trails.map((trail) => (
               <polyline
-                points={trailPoints} fill="none" stroke={appearance.curveColor}
+                key={trail.id} points={trail.points} fill="none" stroke={trail.color}
                 strokeWidth={appearance.lineWidth} strokeLinecap="round" opacity="0.48"
               />
-            )}
+            ))}
+            {appearance.showHelperLines && constraints.map((constraint) => (
+              <g key={constraint.id} data-constraint-id={constraint.id}>
+                {constraint.type === 'spring' ? (
+                  <polyline
+                    points={constraint.points} fill="none" stroke={constraint.color}
+                    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                  />
+                ) : (
+                  <line
+                    x1={constraint.anchor.x} y1={constraint.anchor.y}
+                    x2={constraint.body.x} y2={constraint.body.y}
+                    stroke={constraint.color} strokeWidth="3" strokeLinecap="round"
+                  />
+                )}
+                <circle
+                  cx={constraint.anchor.x} cy={constraint.anchor.y} r="5"
+                  fill={background} stroke={constraint.color} strokeWidth="3"
+                />
+              </g>
+            ))}
             {appearance.showHelperLines && vectors.map((vector) => (
               <g key={vector.id}>
                 <line
-                  x1={body.x} y1={body.y} x2={vector.tip.x} y2={vector.tip.y}
+                  x1={vector.anchor.x} y1={vector.anchor.y} x2={vector.tip.x} y2={vector.tip.y}
                   stroke={vector.color} strokeWidth="3" strokeLinecap="round"
                 />
                 <polygon points={vector.head} fill={vector.color} />
               </g>
             ))}
-            <circle
-              cx={body.x} cy={body.y} r={appearance.pointRadius + 3}
-              fill="url(#time-experiment-body)" stroke={dark ? '#17212B' : '#FFFFFF'} strokeWidth="3"
-            />
+            {bodies.map((body) => (
+              <circle
+                key={body.id} data-body-id={body.id}
+                cx={body.point.x} cy={body.point.y} r={appearance.pointRadius + 3}
+                fill={`url(#time-experiment-body-${body.id})`}
+                stroke={dark ? '#17212B' : '#FFFFFF'} strokeWidth="3"
+              />
+            ))}
           </g>
 
           {appearance.showHelperLines && vectors.map((vector) => (
@@ -180,14 +269,25 @@ export function TimeExperimentCanvas({ scene, time, zoom }: TimeExperimentCanvas
             </text>
           ))}
 
-          {appearance.showPointLabel && (
+          {appearance.showHelperLines && constraints.map((constraint) => (
             <text
-              x={body.x + 17} y={body.y - 15} fill={textColor}
-              fontSize={14 * appearance.fontScale} fontWeight="750"
+              key={`constraint-label-${constraint.id}`}
+              x={constraint.labelX} y={constraint.labelY}
+              fill={constraint.color} fontSize={12 * appearance.fontScale}
+              fontWeight="750" textAnchor={constraint.textAnchor}
             >
-              P({snapshot.x.toFixed(2)}, {snapshot.y.toFixed(2)})
+              {constraint.label} L={constraint.currentLength.toFixed(2)} m
             </text>
-          )}
+          ))}
+
+          {appearance.showPointLabel && bodies.map((body, index) => (
+            <text
+              key={`body-label-${body.id}`} x={body.point.x + 17} y={body.point.y - 15 - index * 3}
+              fill={body.color || textColor} fontSize={14 * appearance.fontScale} fontWeight="750"
+            >
+              {body.label} ({body.x.toFixed(2)}, {body.y.toFixed(2)})
+            </text>
+          ))}
         </svg>
       </div>
 

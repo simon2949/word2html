@@ -2,7 +2,12 @@ import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { GENERATION_API_VERSION, generateLessonPlan, publicModelStatus } from './minimax.mjs'
+import {
+  GENERATION_API_VERSION,
+  generateLessonPlan,
+  publicModelStatus,
+  repairLessonPlan,
+} from './minimax.mjs'
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const production = process.argv.includes('--production')
@@ -47,6 +52,9 @@ async function handleApi(req, res, url) {
         'generic-function-2d',
         'time-experiment-point-2d',
         'time-experiment-vectors',
+        'time-experiment-multi-body',
+        'time-experiment-constraints',
+        'derived-metric-reuse',
       ],
       model: publicModelStatus(),
     })
@@ -65,7 +73,14 @@ async function handleApi(req, res, url) {
         json(res, 400, { error: '教学内容描述不能超过 12000 个字符。' })
         return true
       }
-      const result = await generateLessonPlan(prompt)
+      const correction = body.correction
+      const result = correction === undefined
+        ? await generateLessonPlan(prompt)
+        : await repairLessonPlan(
+            prompt,
+            correction && typeof correction === 'object' ? correction.previousPlan : undefined,
+            correction && typeof correction === 'object' ? correction.validationError : undefined,
+          )
       json(res, 200, result)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'MiniMax-M3 生成失败。'

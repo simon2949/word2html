@@ -89,10 +89,12 @@
         "required": ["id", "kind", "role", "bindings"],
         "properties": {
           "id": { "$ref": "#/$defs/id" },
-          "kind": { "enum": ["axes", "grid", "ellipse", "parabola", "function-curve", "time-point", "vector", "ground-line", "point", "segment", "label", "trail"] },
+          "kind": { "enum": ["axes", "grid", "ellipse", "parabola", "function-curve", "time-point", "vector", "constraint", "ground-line", "point", "segment", "label", "trail"] },
           "role": { "type": "string", "minLength": 1, "maxLength": 80 },
           "label": { "type": "string", "minLength": 1, "maxLength": 40 },
           "unit": { "type": "string", "minLength": 1, "maxLength": 16 },
+          "anchorId": { "$ref": "#/$defs/id" },
+          "constraintType": { "enum": ["rope", "spring"] },
           "bindings": {
             "type": "object",
             "additionalProperties": { "$ref": "#/$defs/expression" }

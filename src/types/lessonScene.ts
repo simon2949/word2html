@@ -34,6 +34,7 @@ export type SceneObjectKind =
   | 'function-curve'
   | 'time-point'
   | 'vector'
+  | 'constraint'
   | 'ground-line'
   | 'point'
   | 'segment'
@@ -46,6 +47,8 @@ export interface SceneObject {
   role: string
   label?: string
   unit?: string
+  anchorId?: string
+  constraintType?: 'rope' | 'spring'
   bindings: Record<string, string>
   visibleWhen?: keyof SceneAppearance
   interactive?: boolean

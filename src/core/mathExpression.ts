@@ -25,6 +25,7 @@ const functions: Record<string, { minArgs: number; maxArgs: number; call: (...va
   min: { minArgs: 2, maxArgs: 6, call: Math.min },
   max: { minArgs: 2, maxArgs: 6, call: Math.max },
   pow: { minArgs: 2, maxArgs: 2, call: Math.pow },
+  step: { minArgs: 1, maxArgs: 1, call: (value) => value >= 0 ? 1 : 0 },
 }
 
 const constants: MathScope = { pi: Math.PI, e: Math.E }

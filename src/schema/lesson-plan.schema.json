@@ -73,6 +73,13 @@
         "durationExpression": { "$ref": "#/$defs/expression" },
         "xExpression": { "$ref": "#/$defs/expression" },
         "yExpression": { "$ref": "#/$defs/expression" },
+        "bodyId": { "$ref": "#/$defs/dynamicId" },
+        "bodyLabel": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "additionalBodies": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/dynamicBody" }
+        },
         "formula": { "type": "string", "minLength": 1, "maxLength": 200 },
         "conclusion": { "type": "string", "minLength": 1, "maxLength": 400 },
         "parameters": {
@@ -108,7 +115,26 @@
               "xExpression": { "$ref": "#/$defs/expression" },
               "yExpression": { "$ref": "#/$defs/expression" },
               "scale": { "type": "number", "minimum": 0.01, "maximum": 20 },
-              "unit": { "type": "string", "minLength": 1, "maxLength": 16 }
+              "unit": { "type": "string", "minLength": 1, "maxLength": 16 },
+              "bodyId": { "$ref": "#/$defs/dynamicId" }
+            }
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "type", "bodyId", "anchorXExpression", "anchorYExpression", "restLengthExpression"],
+            "properties": {
+              "id": { "$ref": "#/$defs/dynamicId" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "type": { "enum": ["rope", "spring"] },
+              "bodyId": { "$ref": "#/$defs/dynamicId" },
+              "anchorXExpression": { "$ref": "#/$defs/expression" },
+              "anchorYExpression": { "$ref": "#/$defs/expression" },
+              "restLengthExpression": { "$ref": "#/$defs/expression" }
             }
           }
         }
@@ -138,6 +164,17 @@
         "min": { "type": "number" },
         "max": { "type": "number" },
         "step": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "dynamicBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "xExpression", "yExpression"],
+      "properties": {
+        "id": { "$ref": "#/$defs/dynamicId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "xExpression": { "$ref": "#/$defs/expression" },
+        "yExpression": { "$ref": "#/$defs/expression" }
       }
     }
   }
