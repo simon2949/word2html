@@ -1,50 +1,6 @@
-const debugPort = Number(process.argv[2] ?? 9333)
-const pageOrigin = process.argv[3] ?? 'http://127.0.0.1:5173'
-const targets = await (await fetch(`http://127.0.0.1:${debugPort}/json`)).json()
-const page = targets.find((target) => target.type === 'page' && target.url.startsWith(pageOrigin))
-if (!page?.webSocketDebuggerUrl) throw new Error(`找不到 ${pageOrigin} 对应的 Chrome 页面。`)
+import { connectAcceptanceBrowser } from './browser-acceptance-client.mjs'
 
-const socket = new WebSocket(page.webSocketDebuggerUrl)
-await new Promise((resolve, reject) => {
-  socket.addEventListener('open', resolve, { once: true })
-  socket.addEventListener('error', reject, { once: true })
-})
-
-let requestId = 0
-async function evaluate(expression) {
-  requestId += 1
-  const id = requestId
-  socket.send(JSON.stringify({
-    id,
-    method: 'Runtime.evaluate',
-    params: { expression, awaitPromise: true, returnByValue: true },
-  }))
-  const message = await new Promise((resolve, reject) => {
-    const cleanup = () => {
-      clearTimeout(timeout)
-      socket.removeEventListener('message', handleMessage)
-      socket.removeEventListener('error', handleError)
-    }
-    const handleMessage = (event) => {
-      const parsed = JSON.parse(event.data)
-      if (parsed.id !== id) return
-      cleanup()
-      resolve(parsed)
-    }
-    const handleError = (error) => {
-      cleanup()
-      reject(error)
-    }
-    const timeout = setTimeout(() => {
-      cleanup()
-      reject(new Error(`等待 Chrome 执行第 ${id} 个验收步骤超时（20 秒）。`))
-    }, 20_000)
-    socket.addEventListener('message', handleMessage)
-    socket.addEventListener('error', handleError, { once: true })
-  })
-  if (message.result?.exceptionDetails) throw new Error(message.result.exceptionDetails.exception?.description ?? message.result.exceptionDetails.text)
-  return message.result?.result?.value
-}
+const { evaluate, close } = await connectAcceptanceBrowser()
 
 await evaluate(`(async function () {
   const library = await import('/src/core/lessonLibrary.ts')
@@ -161,7 +117,7 @@ const result = await evaluate(`(async function () {
     },
   }
 }())`)
-socket.close()
+close()
 
 const assert = (condition, detail) => {
   if (!condition) throw new Error(`几何约束与变换浏览器验收失败：${detail}\n${JSON.stringify(result, null, 2)}`)

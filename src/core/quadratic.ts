@@ -101,6 +101,11 @@ export function resetQuadraticScene(scene: LessonScene): LessonScene {
     helperColor: '#F3A712',
     lineWidth: 3,
     pointRadius: 7,
+    lineStyle: 'solid',
+    helperLineStyle: 'dashed',
+    helperLineWidth: 2,
+    pointStyle: 'outlined',
+    objectStyles: {},
     fontScale: 1,
   }
   const snapshot = getQuadraticSnapshot(next)

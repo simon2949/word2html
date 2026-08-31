@@ -32,12 +32,26 @@ export type SceneObjectKind =
   | 'ellipse'
   | 'parabola'
   | 'function-curve'
+  | 'relation-curve'
+  | 'locus'
   | 'time-point'
   | 'vector'
   | 'constraint'
   | 'ground-line'
   | 'point'
   | 'segment'
+  | 'ray'
+  | 'arc'
+  | 'polygon'
+  | 'collision-body'
+  | 'contact-surface'
+  | 'data-chart'
+  | 'chart-axis'
+  | 'data-category'
+  | 'chart-bar-series'
+  | 'chart-line-series'
+  | 'chart-scatter-series'
+  | 'chart-table-series'
   | 'label'
   | 'trail'
 
@@ -50,7 +64,7 @@ export interface SceneObject {
   anchorId?: string
   constraintType?: 'rope' | 'spring'
   bindings: Record<string, string>
-  visibleWhen?: keyof SceneAppearance
+  visibleWhen?: Exclude<keyof SceneAppearance, 'objectStyles' | 'layoutPreset'>
   interactive?: boolean
 }
 
@@ -72,7 +86,7 @@ export interface SceneInteraction {
   id: string
   trigger: 'drag' | 'click' | 'animation' | 'reset'
   target: string
-  action: 'set-angle' | 'play' | 'pause' | 'reset'
+  action: 'set-angle' | 'set-point' | 'play' | 'pause' | 'reset'
 }
 
 export interface SceneInvariant {
@@ -101,8 +115,30 @@ export interface SceneAppearance {
   helperColor: string
   lineWidth: number
   pointRadius: number
+  lineStyle?: LineStyle
+  helperLineStyle?: LineStyle
+  helperLineWidth?: number
+  pointStyle?: PointStyle
+  objectStyles?: Record<string, ObjectAppearanceOverride>
+  layoutPreset?: LayoutPresetId
   fontScale: number
   animationSpeed: number
+}
+
+export type LineStyle = 'solid' | 'dashed' | 'dash-dot'
+
+export type PointStyle = 'solid' | 'outlined' | 'shadow'
+
+export type LayoutPresetId = 'centered' | 'with-metrics' | 'with-parameters' | 'compact'
+
+export interface ObjectAppearanceOverride {
+  color?: string
+  lineWidth?: number
+  lineStyle?: LineStyle
+  pointRadius?: number
+  pointStyle?: PointStyle
+  fontScale?: number
+  visible?: boolean
 }
 
 export interface LessonScene {

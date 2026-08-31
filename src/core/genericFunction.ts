@@ -153,7 +153,9 @@ export function resetGenericFunctionScene(scene: LessonScene): LessonScene {
     ...next.appearance,
     theme: 'light', showAxes: true, showGrid: true, showPointLabel: false,
     showHelperLines: false, showFormula: true, showTrail: false,
-    curveColor: '#5B5BD6', lineWidth: 3, fontScale: 1,
+    curveColor: '#5B5BD6', lineWidth: 3, lineStyle: 'solid',
+    helperLineStyle: 'solid', helperLineWidth: 2, pointStyle: 'outlined', fontScale: 1,
+    objectStyles: {},
   }
   next.viewport = estimateGenericFunctionViewport(getGenericFunctionSpec(next))
   next.lineage.updatedAt = new Date().toISOString()

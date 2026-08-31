@@ -2,6 +2,8 @@
 
 关联运行时：`experiment.motion.point-2d@4`
 
+当前协议统一浏览器脚本与状态记录见 `motion-point-2d-acceptance.md`。
+
 ## 必需能力
 
 - MiniMax 只返回持续时间、`x(t)`、`y(t)`、参数、测量量、可选矢量表达式与教学说明，不返回代码；

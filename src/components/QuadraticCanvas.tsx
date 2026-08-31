@@ -1,6 +1,19 @@
 import { useMemo } from 'react'
 import { evaluateQuadratic, getQuadraticSnapshot } from '../core/quadratic'
+import {
+  helperLineStyleOf,
+  helperLineWidthOf,
+  lineDashArray,
+  lineWidthOf,
+  lineStyleOf,
+  objectColorOf,
+  objectStyleOf,
+  objectVisibleOf,
+  pointRadiusOf,
+  pointSvgAppearance,
+} from '../core/appearanceStyles'
 import type { LessonScene } from '../types/lessonScene'
+import { sceneObjectSelectionProps } from './sceneObjectSelection'
 import {
   coordinateTicks,
   createPlotTransform,
@@ -13,13 +26,15 @@ import {
 interface QuadraticCanvasProps {
   scene: LessonScene
   zoom: number
+  selectedObjectId?: string | null
+  onObjectSelect?: (objectId: string) => void
 }
 
 const SVG_WIDTH = 900
 const SVG_HEIGHT = 590
 const PADDING = 24
 
-export function QuadraticCanvas({ scene, zoom }: QuadraticCanvasProps) {
+export function QuadraticCanvas({ scene, zoom, selectedObjectId, onObjectSelect }: QuadraticCanvasProps) {
   const snapshot = useMemo(() => getQuadraticSnapshot(scene), [scene])
   const effectiveViewport = useMemo(() => zoomViewport(scene.viewport, zoom), [scene.viewport, zoom])
   const transform = useMemo(
@@ -41,6 +56,13 @@ export function QuadraticCanvas({ scene, zoom }: QuadraticCanvasProps) {
   const textColor = dark ? '#E8EEF3' : '#36404A'
   const showXAxis = plotViewport.yMin <= 0 && plotViewport.yMax >= 0
   const showYAxis = plotViewport.xMin <= 0 && plotViewport.xMax >= 0
+  const curveWidth = lineWidthOf(appearance, 'parabola')
+  const curveStyle = lineStyleOf(appearance, 'parabola')
+  const helperLineWidth = helperLineWidthOf(appearance, 2, 'symmetryAxis')
+  const helperLineStyle = helperLineStyleOf(appearance, 'dashed', 'symmetryAxis')
+  const vertexRadius = pointRadiusOf(appearance, 'vertex')
+  const vertexAppearance = pointSvgAppearance(appearance, appearance.pointColor, background, 'quadratic-point-shadow', 'vertex')
+  const labelStyle = objectStyleOf(appearance, 'vertexLabel')
 
   const curvePath = useMemo(() => {
     const points: string[] = []
@@ -72,6 +94,9 @@ export function QuadraticCanvas({ scene, zoom }: QuadraticCanvasProps) {
           <clipPath id="quadratic-plot-clip">
             <rect x={xOffset} y={yOffset} width={contentWidth} height={contentHeight} />
           </clipPath>
+          <filter id="quadratic-point-shadow" x="-80%" y="-80%" width="260%" height="260%">
+            <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.38" />
+          </filter>
         </defs>
         <rect width={SVG_WIDTH} height={SVG_HEIGHT} rx="22" fill={background} />
 
@@ -113,41 +138,48 @@ export function QuadraticCanvas({ scene, zoom }: QuadraticCanvasProps) {
         )}
 
         <g clipPath="url(#quadratic-plot-clip)">
-          {appearance.showHelperLines && (
+          {appearance.showHelperLines && objectVisibleOf(appearance, 'symmetryAxis') && (
             <line
+              {...sceneObjectSelectionProps('symmetryAxis', '对称轴', selectedObjectId, onObjectSelect)}
+              data-appearance-role="helper-line"
               x1={vertex.x}
               x2={vertex.x}
               y1={yOffset}
               y2={yOffset + contentHeight}
-              stroke={appearance.helperColor}
-              strokeWidth="2"
-              strokeDasharray="7 6"
+              stroke={objectColorOf(appearance, 'symmetryAxis', appearance.helperColor)}
+              strokeWidth={helperLineWidth}
+              strokeDasharray={lineDashArray(helperLineStyle, helperLineWidth)}
+              strokeLinecap="round"
             />
           )}
-          <path
+          {objectVisibleOf(appearance, 'parabola') && <path
+            {...sceneObjectSelectionProps('parabola', '抛物线', selectedObjectId, onObjectSelect)}
+            data-appearance-role="main-line"
             d={curvePath}
             fill="none"
-            stroke={appearance.curveColor}
-            strokeWidth={appearance.lineWidth}
+            stroke={objectColorOf(appearance, 'parabola', appearance.curveColor)}
+            strokeWidth={curveWidth}
+            strokeDasharray={lineDashArray(curveStyle, curveWidth)}
             strokeLinecap="round"
             strokeLinejoin="round"
-          />
+          />}
         </g>
 
-        <circle
+        {objectVisibleOf(appearance, 'vertex') && <circle
+          {...sceneObjectSelectionProps('vertex', '顶点', selectedObjectId, onObjectSelect)}
+          data-appearance-role="primary-point"
           cx={vertex.x}
           cy={vertex.y}
-          r={appearance.pointRadius}
-          fill={appearance.pointColor}
-          stroke={dark ? '#17212B' : '#FFFFFF'}
-          strokeWidth="3"
-        />
-        {appearance.showPointLabel && (
+          r={vertexRadius}
+          {...vertexAppearance}
+        />}
+        {appearance.showPointLabel && objectVisibleOf(appearance, 'vertexLabel') && (
           <text
-            x={vertex.x + 15}
-            y={vertex.y - 14}
-            fill={textColor}
-            fontSize={15 * appearance.fontScale}
+            {...sceneObjectSelectionProps('vertexLabel', '顶点标签', selectedObjectId, onObjectSelect)}
+            x={vertex.x + vertexRadius + 8}
+            y={vertex.y - vertexRadius - 7}
+            fill={objectColorOf(appearance, 'vertexLabel', textColor)}
+            fontSize={15 * (labelStyle.fontScale ?? appearance.fontScale)}
             fontWeight="750"
           >
             V({snapshot.h.toFixed(2)}, {snapshot.k.toFixed(2)})

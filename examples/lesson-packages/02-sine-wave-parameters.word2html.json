@@ -2,7 +2,7 @@
   "format": "word2html.lesson-package",
   "formatVersion": "0.1",
   "kind": "lesson-plan",
-  "apiVersion": "lesson-plan-0.9",
+  "apiVersion": "lesson-plan-1.4",
   "plan": {
     "schemaVersion": "0.1",
     "status": "matched",

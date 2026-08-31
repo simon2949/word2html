@@ -5,6 +5,10 @@ import { createEllipseScene } from '../templates/ellipseTemplate'
 import { createQuadraticScene } from '../templates/quadraticTemplate'
 import { createGenericFunctionScene } from '../templates/genericFunctionTemplate'
 import { createTimeExperimentScene } from '../templates/timeExperimentTemplate'
+import { createGeometry2DScene } from '../templates/geometry2dTemplate'
+import { createCollision2DScene } from '../templates/collision2dTemplate'
+import { createRelationCurve2DScene } from '../templates/relationCurve2dTemplate'
+import { createDataChart2DScene } from '../templates/dataChart2dTemplate'
 import {
   QUADRATIC_TEMPLATE_ID,
   updateQuadraticParameter,
@@ -22,21 +26,47 @@ import {
   validateTimeExperimentSpec,
   type TimeExperimentSpec,
 } from './timeExperiment'
+import {
+  GEOMETRY_2D_TEMPLATE_ID,
+  getGeometry2DSpec,
+  validateGeometry2DSpec,
+  type Geometry2DSpec,
+} from './geometry2d'
+import {
+  COLLISION_2D_TEMPLATE_ID,
+  getCollision2DSpec,
+  validateCollision2DSpec,
+  type Collision2DSpec,
+} from './collision2d'
+import {
+  RELATION_CURVE_2D_TEMPLATE_ID,
+  getRelationCurve2DSpec,
+  validateRelationCurve2DSpec,
+  type RelationCurve2DSpec,
+} from './relationCurve2d'
+import {
+  DATA_CHART_2D_TEMPLATE_ID,
+  getDataChart2DSpec,
+  validateDataChart2DSpec,
+  type DataChart2DSpec,
+} from './dataChart2d'
 import type { LessonScene, Subject } from '../types/lessonScene'
 import { isNumberParameter } from '../types/lessonScene'
 import { assertLessonScene } from './validateScene'
 import { describeLessonPlanChanges } from './lessonPlanDiff'
+import { getCapabilityDefinition, isRegisteredTemplateId } from './capabilityRegistry'
+import { modelRequestHeaders } from './modelRequestIdentity'
 
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 const validatePlanSchema = ajv.compile(lessonPlanSchema)
-export const GENERATION_API_VERSION = 'lesson-plan-0.9'
+export const GENERATION_API_VERSION = 'lesson-plan-1.4'
 
 export interface LessonPlan {
   schemaVersion: '0.1'
   status: 'matched' | 'unsupported'
   subject: Subject
   topic: string
-  templateId: 'math.conic.ellipse-focus-sum' | 'math.function.quadratic-vertex' | 'math.function.generic-2d' | 'experiment.motion.point-2d' | 'unsupported'
+  templateId: 'math.conic.ellipse-focus-sum' | 'math.function.quadratic-vertex' | 'math.function.generic-2d' | 'math.curve.relation-2d' | 'math.geometry.primitives-2d' | 'math.data.chart-2d' | 'experiment.motion.point-2d' | 'physics.collision.discs-2d' | 'unsupported'
   parameterOverrides: {
     majorAxis?: number
     minorAxis?: number
@@ -45,7 +75,11 @@ export interface LessonPlan {
     vertexK?: number
   }
   functionSpec?: GenericFunctionSpec
+  relationSpec?: RelationCurve2DSpec
+  geometrySpec?: Geometry2DSpec
   experimentSpec?: TimeExperimentSpec
+  collisionSpec?: Collision2DSpec
+  dataChartSpec?: DataChart2DSpec
   reason: string
 }
 
@@ -55,6 +89,7 @@ export interface ModelUsage {
   outputTokens?: number
   modelCalls?: number
   repaired?: boolean
+  deduplicated?: boolean
 }
 
 export interface ModelGenerationResult {
@@ -73,17 +108,33 @@ export interface ModelServiceStatus {
   configured: boolean
   apiCompatible: boolean
   provider: string
+  protocol?: 'anthropic-compatible' | 'openai-compatible'
+  profile?: string
   model: string
   baseURL: string
 }
 
+export interface PublicModelOption {
+  id: string
+  label: string
+  provider: string
+  protocol: 'anthropic-compatible' | 'openai-compatible'
+  model: string
+  platformKeyAvailable: boolean
+}
+
+export interface PublicModelOptions {
+  defaultModelId: string
+  models: PublicModelOption[]
+}
+
+export interface TemporaryModelAccess {
+  modelId: string
+  apiKey: string
+}
+
 export function assertSceneRendererSupported(scene: LessonScene): void {
-  if (
-    scene.templateRef.id !== 'math.conic.ellipse-focus-sum' &&
-    scene.templateRef.id !== QUADRATIC_TEMPLATE_ID &&
-    scene.templateRef.id !== GENERIC_FUNCTION_TEMPLATE_ID &&
-    scene.templateRef.id !== TIME_EXPERIMENT_TEMPLATE_ID
-  ) {
+  if (!isRegisteredTemplateId(scene.templateRef.id)) {
     throw new Error(`场景已通过协议校验，但当前渲染器尚不支持模板：${scene.templateRef.id}`)
   }
 }
@@ -126,6 +177,26 @@ export function assertLessonPlan(value: unknown): asserts value is LessonPlan {
   } else if (plan.functionSpec !== undefined) {
     throw new Error('非通用函数计划不能包含函数规格。')
   }
+  if (plan.templateId === RELATION_CURVE_2D_TEMPLATE_ID) {
+    if (plan.subject !== 'math') throw new Error('二维关系曲线必须归类为数学。')
+    if (Object.keys(plan.parameterOverrides).length > 0) throw new Error('二维关系曲线不能包含模板参数覆盖。')
+    if (!plan.relationSpec) throw new Error('二维关系曲线缺少关系曲线规格。')
+    const error = validateRelationCurve2DSpec(plan.relationSpec)
+    if (error) throw new Error(`二维关系曲线规格无效：${error}`)
+  } else if (plan.relationSpec !== undefined) {
+    throw new Error('非二维关系曲线计划不能包含关系曲线规格。')
+  }
+  if (plan.templateId === GEOMETRY_2D_TEMPLATE_ID) {
+    if (plan.subject !== 'math') throw new Error('二维几何场景必须归类为数学。')
+    if (Object.keys(plan.parameterOverrides).length > 0) {
+      throw new Error('二维几何场景不能包含模板参数覆盖。')
+    }
+    if (!plan.geometrySpec) throw new Error('二维几何场景缺少几何规格。')
+    const error = validateGeometry2DSpec(plan.geometrySpec)
+    if (error) throw new Error(`二维几何规格无效：${error}`)
+  } else if (plan.geometrySpec !== undefined) {
+    throw new Error('非二维几何计划不能包含几何规格。')
+  }
   if (plan.templateId === TIME_EXPERIMENT_TEMPLATE_ID) {
     if (plan.subject !== 'physics' && plan.subject !== 'math') {
       throw new Error('二维参数轨迹运行时只支持数学或物理。')
@@ -139,6 +210,26 @@ export function assertLessonPlan(value: unknown): asserts value is LessonPlan {
   } else if (plan.experimentSpec !== undefined) {
     throw new Error('非时间实验计划不能包含实验规格。')
   }
+  if (plan.templateId === COLLISION_2D_TEMPLATE_ID) {
+    if (plan.subject !== 'physics') throw new Error('二维碰撞场景必须归类为物理。')
+    if (Object.keys(plan.parameterOverrides).length > 0) {
+      throw new Error('二维碰撞场景不能包含模板参数覆盖。')
+    }
+    if (!plan.collisionSpec) throw new Error('二维碰撞场景缺少碰撞规格。')
+    const error = validateCollision2DSpec(plan.collisionSpec)
+    if (error) throw new Error(`二维碰撞规格无效：${error}`)
+  } else if (plan.collisionSpec !== undefined) {
+    throw new Error('非二维碰撞计划不能包含碰撞规格。')
+  }
+  if (plan.templateId === DATA_CHART_2D_TEMPLATE_ID) {
+    if (plan.subject !== 'math') throw new Error('数据图表必须归类为数学。')
+    if (Object.keys(plan.parameterOverrides).length > 0) throw new Error('数据图表不能包含模板参数覆盖。')
+    if (!plan.dataChartSpec) throw new Error('数据图表缺少图表规格。')
+    const error = validateDataChart2DSpec(plan.dataChartSpec)
+    if (error) throw new Error(`数据图表规格无效：${error}`)
+  } else if (plan.dataChartSpec !== undefined) {
+    throw new Error('非数据图表计划不能包含图表规格。')
+  }
   if (plan.status === 'unsupported' && Object.keys(plan.parameterOverrides).length > 0) {
     throw new Error('不支持的计划不能包含参数覆盖。')
   }
@@ -148,6 +239,42 @@ export function instantiateLessonPlan(plan: LessonPlan): LessonScene {
   assertLessonPlan(plan)
   if (plan.status === 'unsupported') {
     throw new Error(`当前尚未安装“${plan.topic}”的交互渲染模板。${plan.reason}`)
+  }
+  if (plan.templateId === RELATION_CURVE_2D_TEMPLATE_ID) {
+    const scene = createRelationCurve2DScene(plan.relationSpec!, {
+      title: plan.topic,
+      topic: plan.topic,
+      summary: plan.reason,
+    })
+    assertLessonScene(scene)
+    return scene
+  }
+  if (plan.templateId === DATA_CHART_2D_TEMPLATE_ID) {
+    const scene = createDataChart2DScene(plan.dataChartSpec!, {
+      title: plan.topic,
+      topic: plan.topic,
+      summary: plan.reason,
+    })
+    assertLessonScene(scene)
+    return scene
+  }
+  if (plan.templateId === COLLISION_2D_TEMPLATE_ID) {
+    const scene = createCollision2DScene(plan.collisionSpec!, {
+      title: plan.topic,
+      topic: plan.topic,
+      summary: plan.reason,
+    })
+    assertLessonScene(scene)
+    return scene
+  }
+  if (plan.templateId === GEOMETRY_2D_TEMPLATE_ID) {
+    const scene = createGeometry2DScene(plan.geometrySpec!, {
+      title: plan.topic,
+      topic: plan.topic,
+      summary: plan.reason,
+    })
+    assertLessonScene(scene)
+    return scene
   }
   if (plan.templateId === TIME_EXPERIMENT_TEMPLATE_ID) {
     const scene = createTimeExperimentScene(plan.experimentSpec!, {
@@ -178,6 +305,12 @@ export function instantiateLessonPlan(plan: LessonPlan): LessonScene {
     scene = updateQuadraticParameter(scene, 'coefficientA', coefficientA)
     scene = updateQuadraticParameter(scene, 'vertexH', vertexH)
     scene = updateQuadraticParameter(scene, 'vertexK', vertexK)
+    scene.metadata = {
+      ...scene.metadata,
+      title: plan.topic,
+      topic: plan.topic,
+      summary: plan.reason,
+    }
     scene.lineage = {
       source: 'model',
       matchLevel: 'template',
@@ -205,6 +338,12 @@ export function instantiateLessonPlan(plan: LessonPlan): LessonScene {
 
   scene = updateAxisParameter(scene, 'majorAxis', major)
   scene = updateAxisParameter(scene, 'minorAxis', minor)
+  scene.metadata = {
+    ...scene.metadata,
+    title: plan.topic,
+    topic: plan.topic,
+    summary: plan.reason,
+  }
   scene.lineage = {
     source: 'model',
     matchLevel: 'template',
@@ -282,12 +421,44 @@ export function lessonPlanFromScene(scene: LessonScene): LessonPlan {
       parameterOverrides: {},
       functionSpec: getGenericFunctionSpec(scene),
     }
+  } else if (scene.templateRef.id === RELATION_CURVE_2D_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: RELATION_CURVE_2D_TEMPLATE_ID,
+      parameterOverrides: {},
+      relationSpec: getRelationCurve2DSpec(scene),
+    }
   } else if (scene.templateRef.id === TIME_EXPERIMENT_TEMPLATE_ID) {
     plan = {
       ...common,
       templateId: TIME_EXPERIMENT_TEMPLATE_ID,
       parameterOverrides: {},
       experimentSpec: getTimeExperimentSpec(scene),
+    }
+  } else if (scene.templateRef.id === GEOMETRY_2D_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: GEOMETRY_2D_TEMPLATE_ID,
+      parameterOverrides: {},
+      geometrySpec: getGeometry2DSpec(scene),
+    }
+  } else if (scene.templateRef.id === COLLISION_2D_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      subject: 'physics',
+      templateId: COLLISION_2D_TEMPLATE_ID,
+      parameterOverrides: {},
+      collisionSpec: getCollision2DSpec(scene),
+    }
+  } else if (scene.templateRef.id === DATA_CHART_2D_TEMPLATE_ID) {
+    plan = {
+      ...common,
+      subject: 'math',
+      templateId: DATA_CHART_2D_TEMPLATE_ID,
+      parameterOverrides: {},
+      dataChartSpec: getDataChart2DSpec(scene),
     }
   } else {
     throw new Error(`当前场景不能转换为可编辑规划：${scene.templateRef.id}`)
@@ -326,14 +497,23 @@ export async function getModelServiceStatus(): Promise<ModelServiceStatus> {
     if (!response.ok) throw new Error('status unavailable')
     const payload = await response.json() as {
       apiVersion?: string
-      model?: { configured?: boolean; provider?: string; model?: string; baseURL?: string }
+      model?: {
+        configured?: boolean
+        provider?: string
+        protocol?: 'anthropic-compatible' | 'openai-compatible'
+        profile?: string
+        model?: string
+        baseURL?: string
+      }
     }
     return {
       reachable: true,
       configured: Boolean(payload.model?.configured),
       apiCompatible: payload.apiVersion === GENERATION_API_VERSION,
-      provider: payload.model?.provider ?? 'MiniMax',
-      model: payload.model?.model ?? 'MiniMax-M3',
+      provider: payload.model?.provider ?? '未配置模型服务',
+      protocol: payload.model?.protocol,
+      profile: payload.model?.profile,
+      model: payload.model?.model ?? '未选择模型',
       baseURL: payload.model?.baseURL ?? '',
     }
   } catch {
@@ -341,11 +521,37 @@ export async function getModelServiceStatus(): Promise<ModelServiceStatus> {
       reachable: false,
       configured: false,
       apiCompatible: false,
-      provider: 'MiniMax',
-      model: 'MiniMax-M3',
+      provider: '未配置模型服务',
+      model: '未选择模型',
       baseURL: '',
     }
   }
+}
+
+export async function getPublicModelOptions(): Promise<PublicModelOptions> {
+  const response = await fetch('/api/model-options', { headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error(`无法读取可信模型目录（HTTP ${response.status}）。`)
+  const value: unknown = await response.json()
+  if (!value || typeof value !== 'object') throw new Error('可信模型目录响应格式不正确。')
+  const payload = value as Record<string, unknown>
+  if (payload.apiVersion !== GENERATION_API_VERSION || typeof payload.defaultModelId !== 'string' || !Array.isArray(payload.models)) {
+    throw new Error('可信模型目录与当前应用版本不兼容。')
+  }
+  const protocols = ['anthropic-compatible', 'openai-compatible']
+  const models = payload.models.map((candidate) => {
+    if (!candidate || typeof candidate !== 'object') throw new Error('可信模型目录包含无效项。')
+    const item = candidate as Record<string, unknown>
+    if (
+      typeof item.id !== 'string' || typeof item.label !== 'string' ||
+      typeof item.provider !== 'string' || !protocols.includes(String(item.protocol)) ||
+      typeof item.model !== 'string' || typeof item.platformKeyAvailable !== 'boolean'
+    ) throw new Error('可信模型目录条目不完整。')
+    return item as unknown as PublicModelOption
+  })
+  if (!models.some((item) => item.id === payload.defaultModelId)) {
+    throw new Error('可信模型目录缺少默认模型。')
+  }
+  return { defaultModelId: payload.defaultModelId, models }
 }
 
 interface GenerationPayload {
@@ -355,11 +561,26 @@ interface GenerationPayload {
   provider?: { name?: string; model?: string }
 }
 
-async function postGenerationRequest(endpoint: string, body: Record<string, unknown>): Promise<GenerationPayload> {
+async function postGenerationRequest(
+  endpoint: string,
+  body: Record<string, unknown>,
+  temporaryAccess?: TemporaryModelAccess,
+  csrfToken?: string,
+): Promise<GenerationPayload> {
+  const serializedBody = JSON.stringify(body)
+  const credentialNamespace = temporaryAccess ? `user:${temporaryAccess.modelId}` : 'platform'
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...modelRequestHeaders(`${serializedBody}|credential:${credentialNamespace}`),
+      ...(temporaryAccess ? {
+        'X-Word2HTML-Model-ID': temporaryAccess.modelId,
+        'X-Word2HTML-Temporary-API-Key': temporaryAccess.apiKey,
+      } : csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+    body: serializedBody,
   })
   if (!response.ok) {
     let message = `大模型生成服务返回错误：${response.status}`
@@ -392,13 +613,32 @@ function providerFromPayload(candidate: GenerationPayload) {
     : undefined
 }
 
-export async function generateSceneWithModel(prompt: string): Promise<ModelGenerationResult> {
+function assertPlanMatchesCapability(plan: LessonPlan, capabilityId?: string): void {
+  if (!capabilityId) return
+  const capability = getCapabilityDefinition(capabilityId)
+  if (!capability) throw new Error(`生成请求包含未知能力 ID：${capabilityId}`)
+  if (
+    plan.status !== 'matched' || plan.templateId !== capability.templateId
+    || plan.subject !== capability.subject
+  ) {
+    throw new Error(`大模型规划超出已选能力“${capability.label}”的学科或运行时范围。`)
+  }
+}
+
+export async function generateSceneWithModel(
+  prompt: string,
+  capabilityId?: string,
+  temporaryAccess?: TemporaryModelAccess,
+  csrfToken?: string,
+): Promise<ModelGenerationResult> {
   const endpoint = import.meta.env.VITE_SCENE_GENERATION_ENDPOINT || '/api/generate'
   const first = await postGenerationRequest(endpoint, {
     prompt, schemaVersion: '0.1', locale: 'zh-CN',
-  })
+    ...(capabilityId ? { capabilityId } : {}),
+  }, temporaryAccess, csrfToken)
   try {
     assertLessonPlan(first.plan)
+    assertPlanMatchesCapability(first.plan, capabilityId)
     const scene = instantiateLessonPlan(first.plan)
     return {
       scene,
@@ -409,9 +649,9 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
   } catch (error) {
     const validationError = error instanceof Error ? error.message : '浏览器本地场景校验失败。'
     const modelCalls = first.usage?.modelCalls
-    if (modelCalls !== 1 || !first.plan || typeof first.plan !== 'object') {
+    if ((modelCalls !== 1 && !first.usage?.deduplicated) || !first.plan || typeof first.plan !== 'object') {
       if (modelCalls !== undefined && modelCalls >= 2) {
-        throw new Error(`MiniMax 自动纠错后场景仍无效：${validationError}`)
+        throw new Error(`大模型自动纠错后场景仍无效：${validationError}`)
       }
       throw error
     }
@@ -423,9 +663,11 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
         previousPlan: first.plan,
         validationError: validationError.slice(0, 2400),
       },
-    })
+      ...(capabilityId ? { capabilityId } : {}),
+    }, temporaryAccess, csrfToken)
     try {
       assertLessonPlan(repair.plan)
+      assertPlanMatchesCapability(repair.plan, capabilityId)
       const scene = instantiateLessonPlan(repair.plan)
       const firstUsage = first.usage ?? {}
       const repairUsage = repair.usage ?? {}
@@ -438,12 +680,13 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
           outputTokens: usageSum(firstUsage.outputTokens, repairUsage.outputTokens),
           modelCalls: usageSum(firstUsage.modelCalls, repairUsage.modelCalls) ?? 2,
           repaired: true,
+          ...(firstUsage.deduplicated || repairUsage.deduplicated ? { deduplicated: true } : {}),
         },
         provider: providerFromPayload(repair) ?? providerFromPayload(first),
       }
     } catch (repairError) {
       const message = repairError instanceof Error ? repairError.message : '浏览器本地场景校验失败。'
-      throw new Error(`MiniMax 自动纠错后场景仍无效：${message}`)
+      throw new Error(`大模型自动纠错后场景仍无效：${message}`)
     }
   }
 }
@@ -451,6 +694,8 @@ export async function generateSceneWithModel(prompt: string): Promise<ModelGener
 export async function editSceneWithModel(
   instruction: string,
   currentScene: LessonScene,
+  temporaryAccess?: TemporaryModelAccess,
+  csrfToken?: string,
 ): Promise<ModelGenerationResult> {
   const endpoint = import.meta.env.VITE_SCENE_GENERATION_ENDPOINT || '/api/generate'
   const basePlan = lessonPlanFromScene(currentScene)
@@ -459,7 +704,7 @@ export async function editSceneWithModel(
     schemaVersion: '0.1',
     locale: 'zh-CN',
     edit: { basePlan },
-  })
+  }, temporaryAccess, csrfToken)
   try {
     assertLessonPlan(first.plan)
     const changes = describeLessonPlanChanges(basePlan, first.plan)
@@ -474,9 +719,9 @@ export async function editSceneWithModel(
   } catch (error) {
     const validationError = error instanceof Error ? error.message : '浏览器本地场景校验失败。'
     const modelCalls = first.usage?.modelCalls
-    if (modelCalls !== 1 || !first.plan || typeof first.plan !== 'object') {
+    if ((modelCalls !== 1 && !first.usage?.deduplicated) || !first.plan || typeof first.plan !== 'object') {
       if (modelCalls !== undefined && modelCalls >= 2) {
-        throw new Error(`MiniMax 自动纠错后二次编辑仍无效：${validationError}`)
+        throw new Error(`大模型自动纠错后二次编辑仍无效：${validationError}`)
       }
       throw error
     }
@@ -489,7 +734,7 @@ export async function editSceneWithModel(
         previousPlan: first.plan,
         validationError: validationError.slice(0, 2400),
       },
-    })
+    }, temporaryAccess, csrfToken)
     try {
       assertLessonPlan(repair.plan)
       const changes = describeLessonPlanChanges(basePlan, repair.plan)
@@ -506,12 +751,13 @@ export async function editSceneWithModel(
           outputTokens: usageSum(firstUsage.outputTokens, repairUsage.outputTokens),
           modelCalls: usageSum(firstUsage.modelCalls, repairUsage.modelCalls) ?? 2,
           repaired: true,
+          ...(firstUsage.deduplicated || repairUsage.deduplicated ? { deduplicated: true } : {}),
         },
         provider: providerFromPayload(repair) ?? providerFromPayload(first),
       }
     } catch (repairError) {
       const message = repairError instanceof Error ? repairError.message : '浏览器本地场景校验失败。'
-      throw new Error(`MiniMax 自动纠错后二次编辑仍无效：${message}`)
+      throw new Error(`大模型自动纠错后二次编辑仍无效：${message}`)
     }
   }
 }

@@ -3,6 +3,7 @@ import {
   assertSceneRendererSupported,
   GENERATION_API_VERSION,
   instantiateLessonPlan,
+  lessonPlanFromScene,
   type LessonPlan,
 } from './modelGateway'
 import { assertLessonScene } from './validateScene'
@@ -10,7 +11,7 @@ import type { LessonScene } from '../types/lessonScene'
 
 export const LESSON_PACKAGE_FORMAT = 'word2html.lesson-package'
 export const LESSON_PACKAGE_VERSION = '0.1'
-export const LEGACY_LESSON_PACKAGE_API_VERSIONS = ['lesson-plan-0.6', 'lesson-plan-0.7', 'lesson-plan-0.8'] as const
+export const LEGACY_LESSON_PACKAGE_API_VERSIONS = ['lesson-plan-0.6', 'lesson-plan-0.7', 'lesson-plan-0.8', 'lesson-plan-0.9', 'lesson-plan-1.0', 'lesson-plan-1.1', 'lesson-plan-1.2', 'lesson-plan-1.3'] as const
 type LegacyLessonPackageApiVersion = typeof LEGACY_LESSON_PACKAGE_API_VERSIONS[number]
 
 export interface LessonPackage {
@@ -86,4 +87,15 @@ export function createLessonPackage(plan: LessonPlan): LessonPackage {
     apiVersion: GENERATION_API_VERSION,
     plan: structuredClone(plan),
   }
+}
+
+/**
+ * Export an installed scene through the same compact, declarative format used
+ * by model generation and contextual editing. Pure appearance settings remain
+ * available through the full LessonScene export instead.
+ */
+export function createLessonPackageFromScene(scene: LessonScene): LessonPackage {
+  assertLessonScene(scene)
+  assertSceneRendererSupported(scene)
+  return createLessonPackage(lessonPlanFromScene(scene))
 }

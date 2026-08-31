@@ -6,3 +6,9 @@ dist/
 .env.*
 !.env.example
 coverage/
+.word2html-data/
+.word2html-backups/
+.word2html-migrations/
+deploy/config.env
+deploy/secrets/*
+!deploy/secrets/README.md

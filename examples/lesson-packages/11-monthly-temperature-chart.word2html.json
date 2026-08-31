@@ -1,0 +1,28 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-1.4",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "两地月平均气温比较",
+    "templateId": "math.data.chart-2d",
+    "parameterOverrides": {},
+    "dataChartSpec": {
+      "mode": "line",
+      "formula": "用折线的方向和斜率比较数据变化趋势",
+      "conclusion": "甲地气温上升更快；两地在四月的平均气温最接近。",
+      "xLabel": "月份",
+      "yLabel": "月平均气温",
+      "unit": "℃",
+      "categories": ["一月", "二月", "三月", "四月", "五月", "六月"],
+      "series": [
+        { "id": "placeA", "label": "甲地", "values": [-2, 1, 7, 14, 20, 24] },
+        { "id": "placeB", "label": "乙地", "values": [6, 8, 11, 15, 19, 22] }
+      ]
+    },
+    "reason": "用两个数据系列演示如何从折线图读取变化趋势、比较增减速度和接近程度。"
+  }
+}

@@ -7,7 +7,7 @@ Use UTF-8 JSON and the `.word2html.json` suffix.
   "format": "word2html.lesson-package",
   "formatVersion": "0.1",
   "kind": "lesson-plan",
-  "apiVersion": "lesson-plan-0.9",
+  "apiVersion": "lesson-plan-1.4",
   "plan": {}
 }
 ```
@@ -15,7 +15,7 @@ Use UTF-8 JSON and the `.word2html.json` suffix.
 All five properties are required and no other top-level properties are allowed. `plan` must satisfy `src/schema/lesson-plan.schema.json` in the Word2HTML repository and the semantic restrictions enforced by `src/core/modelGateway.ts`.
 
 The application also accepts legacy raw LessonScene 0.1 JSON files. New model-authored artifacts must use the compact package above because it costs fewer tokens and lets the trusted local runtime construct the full scene.
-Packages authored for `lesson-plan-0.6`, `lesson-plan-0.7`, and `lesson-plan-0.8` remain import-compatible, but all newly authored packages must use `lesson-plan-0.9`.
+Packages authored for `lesson-plan-0.6` through `lesson-plan-1.3` remain import-compatible, but all newly authored packages must use `lesson-plan-1.4`.
 
 ## Import behavior
 
@@ -34,3 +34,24 @@ Packages authored for `lesson-plan-0.6`, `lesson-plan-0.7`, and `lesson-plan-0.8
 For `experimentSpec.vectors`, use optional `display: "distance"` when the line represents a geometric distance. Set `scale` to `1` and make `(xExpression, yExpression)` equal to target coordinates minus the anchored body's coordinates. The renderer draws a straight segment without an arrowhead and labels its actual magnitude. Omit `display` or use `"arrow"` for physical vectors. Use `labelMode: "value"` to show only the numeric magnitude; omit it or use `"full"` to show label, value, and unit.
 
 Body labels are coordinate prefixes: the renderer appends `(x,y)`. Use `bodyLabel: "P"` or an additional body `label: "Q"` to display `P(x,y)` or `Q(x,y)`; do not put coordinate placeholders in the label itself.
+
+For `geometrySpec`, always include `formula`, `conclusion`, and all seven arrays: `parameters`, `points`, `connections`, `arcs`, `polygons`, `measurements`, and `loci`. Empty collections are empty arrays, not omitted. Point-coordinate, construction, constraint-radius, and custom-measurement expressions use the same safe expression language. Object references use declared point IDs; do not use generated scene IDs such as `point.A` inside the compact plan.
+
+Each geometry point has exactly one definition shape:
+
+- coordinate point: `xExpression`, `yExpression`, optional `draggable`, and optional `constraint`;
+- constructed point: one `construction` object and no coordinates, dragging, or constraint.
+
+Construction forms are `midpoint(pointAId, pointBId)`, `translation(sourcePointId, dxExpression, dyExpression)`, `rotation(sourcePointId, centerPointId, angleExpression)`, `reflection(sourcePointId, linePointAId, linePointBId)`, `dilation(sourcePointId, centerPointId, scaleExpression)`, and `projection(sourcePointId, linePointAId, linePointBId)`. Rotation angles are radians. Coordinate-point constraints are `line`/`segment` with two reference points or `circle` with a center and positive radius expression. A locus supplies `id`, `label`, `pointId`, `parameterId`, and optionally both `min` and `max`; never supply samples, paths, frames, or code.
+
+For `relationSpec`, always include `mode`, `formula`, `conclusion`, `parameters`, `xMin`, `xMax`, `yMin`, and `yMax`. Choose one mutually exclusive expression shape:
+
+- `parametric`: add `variableMin`, `variableMax`, `xExpression`, and `yExpression`; expressions may use `t` and declared parameters.
+- `polar`: add `variableMin`, `variableMax`, and `radialExpression`; the expression may use `theta` and declared parameters. Angles are radians.
+- `implicit`: add only `implicitExpression`; the expression represents `F(x,y)=0` and may use `x`, `y`, and declared parameters.
+
+Parameter IDs must not be `x`, `y`, `t`, `theta`, a safe function, or a safe constant. Do not add sampled points, paths, frames, or fields from another mode. Keep the viewport inside `-100` to `100`; parametric ranges inside `-100` to `100`; polar ranges inside `-20*pi` to `20*pi`.
+
+For `collisionSpec`, always include `durationExpression`, `gravityXExpression`, `gravityYExpression`, `restitutionExpression`, `formula`, `conclusion`, `parameters`, `bounds`, and `bodies`. Use 2–8 unique body IDs. Each body supplies string expressions for initial `x`, `y`, `vx`, `vy`, `radius`, and `mass`; do not include time `t`, keyframes, collision events, or generated scene IDs. When the user requests adjustable mass or velocity for several bodies, create separate mass, `vx`, and `vy` parameters for every requested body and reference them from that body's expressions; never make only the first body adjustable. Initial discs must be inside the rectangular bounds and non-overlapping. Keep duration within 0.2–20 seconds, restitution within 0–1, radius at least 0.2, and projected speeds moderate so the deterministic solver can guarantee contact resolution.
+
+For `dataChartSpec`, always include `mode`, `formula`, `conclusion`, `xLabel`, `yLabel`, `unit`, and `series`. For `table`, `bar`, and `line`, also include 1–24 unique non-empty `categories`; every one of the 1–4 series contains `id`, `label`, and a `values` array of exactly the same length. A line chart needs at least two categories. For `scatter`, omit `categories`; every series contains `id`, `label`, and 1–60 `{ "x": number, "y": number }` points. Do not mix `values` and `points`, and do not include SVG, chart-library configuration, callbacks, or sampled paths.

@@ -157,6 +157,11 @@ export function resetSceneValues(scene: LessonScene): LessonScene {
     helperColor: '#F3A712',
     lineWidth: 3,
     pointRadius: 7,
+    lineStyle: 'solid',
+    helperLineStyle: 'dashed',
+    helperLineWidth: 2.25,
+    pointStyle: 'outlined',
+    objectStyles: {},
     fontScale: 1,
     animationSpeed: 0.55,
   }
@@ -206,4 +211,3 @@ export function sampleEllipseInvariant(
   const tolerance = Math.max(1e-8, majorAxis * 1e-8)
   return { passed: maxError <= tolerance, maxError }
 }
-

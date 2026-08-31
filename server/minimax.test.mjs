@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   editLessonPlan,
   extractPlanFromModelResponse,
+  generationSchemaForCapability,
   generateLessonPlan,
   normalizeGeneratedPlan,
   publicModelStatus,
@@ -53,6 +54,20 @@ function genericFunctionPlan() {
   }
 }
 
+function relationCurvePlan() {
+  return {
+    schemaVersion: '0.1', status: 'matched', subject: 'math',
+    topic: '三瓣玫瑰线', templateId: 'math.curve.relation-2d', parameterOverrides: {},
+    relationSpec: {
+      mode: 'polar', formula: 'r=a cos(3θ)', conclusion: '观察尺度参数对玫瑰线的影响。',
+      parameters: [{ id: 'a', label: '尺度 a', value: 3, min: 1, max: 5, step: 0.25 }],
+      xMin: -4, xMax: 4, yMin: -4, yMax: 4,
+      variableMin: 0, variableMax: Math.PI * 2, radialExpression: 'a*cos(3*theta)',
+    },
+    reason: '使用安全二维关系曲线运行时。',
+  }
+}
+
 function timeExperimentPlan() {
   return {
     schemaVersion: '0.1', status: 'matched', subject: 'physics',
@@ -75,6 +90,72 @@ function timeExperimentPlan() {
       ],
     },
     reason: '使用通用二维点运动实验运行时。',
+  }
+}
+
+function geometryPlan() {
+  return {
+    schemaVersion: '0.1', status: 'matched', subject: 'math',
+    topic: '三角形边角测量', templateId: 'math.geometry.primitives-2d', parameterOverrides: {},
+    geometrySpec: {
+      formula: 'S=1/2*base*height', conclusion: '拖动顶点观察测量值变化。',
+      parameters: [
+        { id: 'Ax', label: 'A 点横坐标', value: 0, min: -8, max: 8, step: 0.1 },
+        { id: 'Ay', label: 'A 点纵坐标', value: 0, min: -6, max: 6, step: 0.1 },
+      ],
+      points: [
+        { id: 'A', label: 'A', xExpression: 'Ax', yExpression: 'Ay', draggable: true },
+        { id: 'B', label: 'B', xExpression: '3', yExpression: '0' },
+        { id: 'C', label: 'C', xExpression: '0', yExpression: '4' },
+      ],
+      connections: [{ id: 'AB', label: 'AB', kind: 'segment', fromPointId: 'A', toPointId: 'B' }],
+      arcs: [{ id: 'Aarc', label: '∠A', centerPointId: 'A', startPointId: 'B', endPointId: 'C' }],
+      polygons: [{ id: 'ABC', label: '三角形 ABC', pointIds: ['A', 'B', 'C'], filled: true }],
+      measurements: [
+        { id: 'AB', label: 'AB', kind: 'distance', pointIds: ['A', 'B'], unit: '' },
+        { id: 'area', label: '面积', kind: 'area', pointIds: ['A', 'B', 'C'], unit: '' },
+      ],
+      loci: [],
+    },
+    reason: '使用声明式二维几何运行时。',
+  }
+}
+
+function collisionPlan() {
+  return {
+    schemaVersion: '0.1', status: 'matched', subject: 'physics',
+    topic: '二维圆盘碰撞', templateId: 'physics.collision.discs-2d', parameterOverrides: {},
+    collisionSpec: {
+      durationExpression: 'duration', gravityXExpression: '0', gravityYExpression: '0',
+      restitutionExpression: 'restitution',
+      formula: '碰撞前后系统总动量守恒', conclusion: '改变恢复系数，观察碰后速度和总动能。',
+      parameters: [
+        { id: 'duration', label: '实验时长', value: 4, min: 2, max: 8, step: 0.25 },
+        { id: 'restitution', label: '恢复系数', value: 0.9, min: 0, max: 1, step: 0.1 },
+      ],
+      bounds: { xMinExpression: '0-8', xMaxExpression: '8', yMinExpression: '0-5', yMaxExpression: '5' },
+      bodies: [
+        { id: 'ballA', label: '圆盘 A', xExpression: '0-3', yExpression: '0', vxExpression: '2', vyExpression: '0.4', radiusExpression: '0.6', massExpression: '1' },
+        { id: 'ballB', label: '圆盘 B', xExpression: '1', yExpression: '0.5', vxExpression: '0-1', vyExpression: '0', radiusExpression: '0.7', massExpression: '2' },
+      ],
+    },
+    reason: '使用确定性二维圆盘接触求解器。',
+  }
+}
+
+function dataChartPlan() {
+  return {
+    schemaVersion: '0.1', status: 'matched', subject: 'math',
+    topic: '两地月平均气温', templateId: 'math.data.chart-2d', parameterOverrides: {},
+    dataChartSpec: {
+      mode: 'line', formula: '比较折线变化趋势', conclusion: '甲地升温更快。',
+      xLabel: '月份', yLabel: '平均气温', unit: '℃', categories: ['一月', '二月', '三月'],
+      series: [
+        { id: 'placeA', label: '甲地', values: [-2, 1, 7] },
+        { id: 'placeB', label: '乙地', values: [6, 8, 11] },
+      ],
+    },
+    reason: '使用安全数据图表运行时。',
   }
 }
 
@@ -206,6 +287,25 @@ describe('MiniMax compact planning', () => {
       ...timeExperimentPlan(),
       experimentSpec: { ...timeExperimentPlan().experimentSpec, yExpression: 'document(t)' },
     })).toThrow(/未知标识符/)
+  })
+
+  it('normalizes compact chart values and rejects mismatched series lengths', () => {
+    const normalized = normalizeGeneratedPlan({
+      ...dataChartPlan(),
+      dataChartSpec: {
+        ...dataChartPlan().dataChartSpec,
+        series: [{ id: 'placeA', label: '甲地', values: ['-2', '1', '7'] }],
+      },
+    })
+    expect(normalized.dataChartSpec.series[0].values).toEqual([-2, 1, 7])
+    expect(validateGeneratedPlan(normalized)).toEqual(normalized)
+    expect(() => validateGeneratedPlan({
+      ...dataChartPlan(),
+      dataChartSpec: {
+        ...dataChartPlan().dataChartSpec,
+        series: [{ id: 'placeA', label: '甲地', values: [1, 2] }],
+      },
+    })).toThrow(/数量必须与类别数量一致/)
   })
 
   it('accepts multiple bodies and rejects a vector with a missing anchor', () => {
@@ -356,11 +456,197 @@ describe('MiniMax compact planning', () => {
     expect(request.tool_choice).toEqual({ type: 'tool', name: 'emit_lesson_plan' })
     expect(request.tools[0].input_schema.title).toBe('LessonPlan 0.1')
     expect(result.plan).toEqual(plan)
-    expect(result.apiVersion).toBe('lesson-plan-0.9')
+    expect(result.apiVersion).toBe('lesson-plan-1.4')
     expect(result.usage).toEqual({
       inputTokens: 80, cachedInputTokens: 30, outputTokens: 90,
       modelCalls: 1, repaired: false,
     })
+  })
+
+  it('generates a validated plan through an OpenAI-compatible endpoint', async () => {
+    const plan = ellipsePlan()
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'chatcmpl-word2html',
+        model: 'lesson-planner-v1',
+        choices: [{
+          message: {
+            tool_calls: [{
+              id: 'call-plan',
+              type: 'function',
+              function: { name: 'emit_lesson_plan', arguments: JSON.stringify(plan) },
+            }],
+          },
+        }],
+        usage: { prompt_tokens: 88, completion_tokens: 42 },
+      }),
+    })
+    const result = await generateLessonPlan('演示椭圆焦点距离和', {
+      environment: {
+        WORD2HTML_MODEL_PROTOCOL: 'openai-compatible',
+        WORD2HTML_MODEL_PROVIDER: '校内模型网关',
+        WORD2HTML_MODEL_BASE_URL: 'https://models.example.edu/v1',
+        WORD2HTML_MODEL_MODEL: 'lesson-planner-v1',
+        WORD2HTML_MODEL_API_KEY: 'test-key',
+      },
+      fetchImpl,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const request = JSON.parse(fetchImpl.mock.calls[0][1].body)
+    expect(request.model).toBe('lesson-planner-v1')
+    expect(request.tools[0].function.name).toBe('emit_lesson_plan')
+    expect(request.tool_choice).toEqual({ type: 'function', function: { name: 'emit_lesson_plan' } })
+    expect(result.plan).toEqual(plan)
+    expect(result.provider).toEqual({ name: '校内模型网关', model: 'lesson-planner-v1' })
+    expect(result.usage).toEqual({
+      inputTokens: 88, cachedInputTokens: undefined, outputTokens: 42,
+      modelCalls: 1, repaired: false,
+    })
+  })
+
+  it('narrows first-generation schema and instructions to the selected capability', async () => {
+    const plan = genericFunctionPlan()
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 60, output_tokens: 70 },
+    })
+    const result = await generateLessonPlan('绘制余弦函数', {
+      capabilityId: 'math.function.explicit-2d',
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const request = create.mock.calls[0][0]
+    const schema = request.tools[0].input_schema
+    expect(schema.properties.subject).toEqual({ const: 'math' })
+    expect(schema.properties.templateId).toEqual({ const: 'math.function.generic-2d' })
+    expect(schema.required).toContain('functionSpec')
+    expect(schema.properties).not.toHaveProperty('experimentSpec')
+    expect(request.system).toContain('math.function.explicit-2d')
+    expect(request.system).not.toContain('两个独立钟摆')
+    expect(result.plan).toEqual(plan)
+  })
+
+  it('builds a subject-specific schema for mathematical parameter traces', () => {
+    const schema = generationSchemaForCapability('math.geometry.parametric-trace-2d')
+    expect(schema.properties.subject).toEqual({ const: 'math' })
+    expect(schema.properties.templateId).toEqual({ const: 'experiment.motion.point-2d' })
+    expect(schema.required).toContain('experimentSpec')
+    expect(schema.properties).not.toHaveProperty('functionSpec')
+    expect(() => generationSchemaForCapability('unknown.capability')).toThrow(/未知能力 ID/)
+  })
+
+  it('narrows geometry generation to a declarative geometry specification', async () => {
+    const plan = geometryPlan()
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 70, output_tokens: 120 },
+    })
+    const result = await generateLessonPlan('制作可拖动三角形并显示面积', {
+      capabilityId: 'math.geometry.primitives-2d',
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const request = create.mock.calls[0][0]
+    const schema = request.tools[0].input_schema
+    expect(schema.properties.templateId).toEqual({ const: 'math.geometry.primitives-2d' })
+    expect(schema.required).toContain('geometrySpec')
+    expect(schema.properties).not.toHaveProperty('functionSpec')
+    expect(schema.properties).not.toHaveProperty('experimentSpec')
+    expect(request.system).toContain('connections.kind')
+    expect(request.system).toContain('construction.kind')
+    expect(request.system).toContain('固定采样 241 点')
+    expect(validateGeneratedPlan(result.plan)).toEqual(plan)
+  })
+
+  it('accepts constructed geometry points, drag constraints, and declarative loci', async () => {
+    const plan = geometryPlan()
+    plan.geometrySpec.parameters.push({ id: 'theta', label: '旋转角', value: 0.5, min: 0, max: 6.28, step: 0.05 })
+    plan.geometrySpec.points[0].constraint = { kind: 'segment', pointAId: 'B', pointBId: 'C' }
+    plan.geometrySpec.points.push({ id: 'R', label: 'R', construction: { kind: 'rotation', sourcePointId: 'B', centerPointId: 'A', angleExpression: 'theta' } })
+    plan.geometrySpec.loci = [{ id: 'rotation', label: 'R 的轨迹', pointId: 'R', parameterId: 'theta' }]
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3', content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 80, output_tokens: 140 },
+    })
+    const result = await generateLessonPlan('作点绕中心旋转并显示轨迹', {
+      capabilityId: 'math.geometry.primitives-2d', environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+    expect(validateGeneratedPlan(result.plan)).toEqual(plan)
+  })
+
+  it('narrows polar and implicit curves to relationSpec without sampled paths', async () => {
+    const plan = relationCurvePlan()
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 65, output_tokens: 100 },
+    })
+    const result = await generateLessonPlan('绘制极坐标三瓣玫瑰线，可调尺度', {
+      capabilityId: 'math.curve.relation-2d',
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const request = create.mock.calls[0][0]
+    const schema = request.tools[0].input_schema
+    expect(schema.properties.templateId).toEqual({ const: 'math.curve.relation-2d' })
+    expect(schema.required).toContain('relationSpec')
+    expect(schema.properties).not.toHaveProperty('functionSpec')
+    expect(schema.properties).not.toHaveProperty('experimentSpec')
+    expect(request.system).toContain('radialExpression')
+    expect(validateGeneratedPlan(result.plan)).toEqual(plan)
+  })
+
+  it('narrows real contact generation to the deterministic collision specification', async () => {
+    const plan = collisionPlan()
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 90, output_tokens: 150 },
+    })
+    const result = await generateLessonPlan('制作三个小球在二维平面碰撞的实验', {
+      capabilityId: 'physics.collision.discs-2d',
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const request = create.mock.calls[0][0]
+    const schema = request.tools[0].input_schema
+    expect(schema.properties.templateId).toEqual({ const: 'physics.collision.discs-2d' })
+    expect(schema.required).toContain('collisionSpec')
+    expect(schema.properties).not.toHaveProperty('experimentSpec')
+    expect(request.system).toContain('初始圆盘不得重叠或越界')
+    expect(request.system).toContain('不得只给第一个圆盘参数')
+    expect(validateGeneratedPlan(result.plan)).toEqual(plan)
+  })
+
+  it('narrows statistical chart generation to dataChartSpec without executable drawing code', async () => {
+    const plan = dataChartPlan()
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: plan }],
+      usage: { input_tokens: 55, output_tokens: 80 },
+    })
+    const result = await generateLessonPlan('制作两地月平均气温折线图', {
+      capabilityId: 'math.data.chart-2d',
+      environment: { MINIMAX_API_KEY: 'test-key' },
+      client: { messages: { create } },
+    })
+
+    const request = create.mock.calls[0][0]
+    const schema = request.tools[0].input_schema
+    expect(schema.properties.templateId).toEqual({ const: 'math.data.chart-2d' })
+    expect(schema.required).toContain('dataChartSpec')
+    expect(schema.properties).not.toHaveProperty('geometrySpec')
+    expect(request.system).toContain('不要返回 SVG')
+    expect(validateGeneratedPlan(result.plan)).toEqual(plan)
   })
 
   it('feeds validation errors back once and aggregates repair token usage', async () => {
@@ -434,8 +720,33 @@ describe('MiniMax compact planning', () => {
     expect(editSchema.properties.functionSpec).toBeUndefined()
     expect(result.plan.experimentSpec.vectors[0].display).toBe('distance')
     expect(result.plan.experimentSpec.vectors[0].labelMode).toBe('value')
-    expect(result.apiVersion).toBe('lesson-plan-0.9')
+    expect(result.apiVersion).toBe('lesson-plan-1.4')
     expect(result.usage.modelCalls).toBe(1)
+  })
+
+  it('edits the current chart through a chart-only contextual schema', async () => {
+    const current = dataChartPlan()
+    const edited = {
+      ...current,
+      reason: '把同一份数据改为分组柱状图。',
+      dataChartSpec: { ...current.dataChartSpec, mode: 'bar' },
+    }
+    const create = vi.fn().mockResolvedValue({
+      model: 'MiniMax-M3',
+      content: [{ type: 'tool_use', name: 'emit_lesson_plan', input: edited }],
+      usage: { input_tokens: 120, output_tokens: 70 },
+    })
+
+    const result = await editLessonPlan('保留数据，改成分组柱状图', current, {
+      environment: { MINIMAX_API_KEY: 'test-key' }, client: { messages: { create } },
+    })
+
+    const schema = create.mock.calls[0][0].tools[0].input_schema
+    expect(schema.properties.templateId).toEqual({ const: 'math.data.chart-2d' })
+    expect(schema.required).toContain('dataChartSpec')
+    expect(schema.properties.experimentSpec).toBeUndefined()
+    expect(create.mock.calls[0][0].system).toContain('填写完整 dataChartSpec')
+    expect(result.plan.dataChartSpec.mode).toBe('bar')
   })
 
   it('repairs a label edit that initially drifts into a generic function plan', async () => {

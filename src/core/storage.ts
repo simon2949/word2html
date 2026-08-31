@@ -33,11 +33,16 @@ function readPromptCache(): PromptCache {
   }
 }
 
-export function getCachedScene(normalizedPrompt: string): LessonScene | null {
+export function getCachedScene(
+  normalizedPrompt: string,
+  expected?: { templateId?: string; subject?: LessonScene['metadata']['subject'] },
+): LessonScene | null {
   const cached = readPromptCache()[normalizedPrompt]
   if (!cached) return null
   try {
     assertLessonScene(cached)
+    if (expected?.templateId && cached.templateRef.id !== expected.templateId) return null
+    if (expected?.subject && cached.metadata.subject !== expected.subject) return null
     const scene = structuredClone(cached)
     scene.lineage.matchLevel = 'exact'
     scene.lineage.updatedAt = new Date().toISOString()
@@ -65,4 +70,3 @@ export function downloadTextFile(filename: string, content: string, type: string
   anchor.remove()
   URL.revokeObjectURL(url)
 }
-

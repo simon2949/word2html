@@ -57,4 +57,48 @@ describe('LessonScene validation', () => {
     expect(result.valid).toBe(true)
     expect(result.issues.some((issue) => issue.severity === 'warning')).toBe(true)
   })
+
+  it('accepts older appearance objects and rejects unknown point or line styles', () => {
+    const legacy = createEllipseScene()
+    delete legacy.appearance.pointStyle
+    delete legacy.appearance.lineStyle
+    delete legacy.appearance.helperLineStyle
+    delete legacy.appearance.helperLineWidth
+    expect(validateLessonScene(legacy).valid).toBe(true)
+
+    const invalid = createEllipseScene()
+    invalid.appearance.pointStyle = 'gradient' as never
+    expect(validateLessonScene(invalid).valid).toBe(false)
+  })
+
+  it('accepts the optional layout preset enum and keeps legacy scenes compatible', () => {
+    const legacy = createEllipseScene()
+    delete legacy.appearance.layoutPreset
+    expect(validateLessonScene(legacy).valid).toBe(true)
+
+    const compact = createEllipseScene()
+    compact.appearance.layoutPreset = 'compact'
+    expect(validateLessonScene(compact).valid).toBe(true)
+
+    const invalid = createEllipseScene()
+    invalid.appearance.layoutPreset = 'free-css-layout' as never
+    expect(validateLessonScene(invalid).valid).toBe(false)
+  })
+
+  it('accepts valid object overrides and rejects missing or non-editable object references', () => {
+    const valid = createEllipseScene()
+    valid.appearance.objectStyles = {
+      focusLeft: { color: '#123456', pointRadius: 12 },
+      distanceRight: { lineWidth: 5, lineStyle: 'dashed' },
+    }
+    expect(validateLessonScene(valid).valid).toBe(true)
+
+    const missing = createEllipseScene()
+    missing.appearance.objectStyles = { unknownPoint: { pointRadius: 10 } }
+    expect(validateLessonScene(missing).issues.some((issue) => issue.message.includes('引用不存在'))).toBe(true)
+
+    const grid = createEllipseScene()
+    grid.appearance.objectStyles = { grid: { color: '#123456' } }
+    expect(validateLessonScene(grid).issues.some((issue) => issue.message.includes('不支持独立外观'))).toBe(true)
+  })
 })

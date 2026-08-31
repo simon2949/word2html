@@ -34,4 +34,14 @@ describe('validated prompt cache', () => {
 
     expect(getCachedScene('broken')).toBeNull()
   })
+
+  it('rejects cache entries from another capability target', () => {
+    const scene = createEllipseScene()
+    cacheScene('isolated', scene)
+    expect(getCachedScene('isolated', { templateId: 'math.function.generic-2d' })).toBeNull()
+    expect(getCachedScene('isolated', { subject: 'physics' })).toBeNull()
+    expect(getCachedScene('isolated', {
+      templateId: 'math.conic.ellipse-focus-sum', subject: 'math',
+    })).not.toBeNull()
+  })
 })

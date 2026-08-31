@@ -1,6 +1,14 @@
 import { useMemo } from 'react'
 import { getGenericFunctionSpec, sampleGenericFunction } from '../core/genericFunction'
+import {
+  lineDashArray,
+  lineStyleOf,
+  lineWidthOf,
+  objectColorOf,
+  objectVisibleOf,
+} from '../core/appearanceStyles'
 import type { LessonScene } from '../types/lessonScene'
+import { sceneObjectSelectionProps } from './sceneObjectSelection'
 import {
   coordinateTicks,
   createPlotTransform,
@@ -13,13 +21,15 @@ import {
 interface GenericFunctionCanvasProps {
   scene: LessonScene
   zoom: number
+  selectedObjectId?: string | null
+  onObjectSelect?: (objectId: string) => void
 }
 
 const SVG_WIDTH = 900
 const SVG_HEIGHT = 590
 const PADDING = 24
 
-export function GenericFunctionCanvas({ scene, zoom }: GenericFunctionCanvasProps) {
+export function GenericFunctionCanvas({ scene, zoom, selectedObjectId, onObjectSelect }: GenericFunctionCanvasProps) {
   const spec = useMemo(() => getGenericFunctionSpec(scene), [scene])
   const samples = useMemo(() => sampleGenericFunction(spec, 801), [spec])
   const effectiveViewport = useMemo(() => zoomViewport(scene.viewport, zoom), [scene.viewport, zoom])
@@ -40,6 +50,7 @@ export function GenericFunctionCanvas({ scene, zoom }: GenericFunctionCanvasProp
   const axisColor = dark ? '#7D8D9C' : '#9AA3AE'
   const showXAxis = plotViewport.yMin <= 0 && plotViewport.yMax >= 0
   const showYAxis = plotViewport.xMin <= 0 && plotViewport.xMax >= 0
+  const curveWidth = lineWidthOf(appearance, 'functionCurve')
 
   const curvePath = useMemo(() => {
     const parts: string[] = []
@@ -117,14 +128,17 @@ export function GenericFunctionCanvas({ scene, zoom }: GenericFunctionCanvasProp
           )}
 
           <g clipPath="url(#generic-function-plot-clip)">
-            <path
+            {objectVisibleOf(appearance, 'functionCurve') && <path
+              {...sceneObjectSelectionProps('functionCurve', '函数曲线', selectedObjectId, onObjectSelect)}
+              data-appearance-role="main-line"
               d={curvePath}
               fill="none"
-              stroke={appearance.curveColor}
-              strokeWidth={appearance.lineWidth}
+              stroke={objectColorOf(appearance, 'functionCurve', appearance.curveColor)}
+              strokeWidth={curveWidth}
+              strokeDasharray={lineDashArray(lineStyleOf(appearance, 'functionCurve'), curveWidth)}
               strokeLinecap="round"
               strokeLinejoin="round"
-            />
+            />}
           </g>
         </svg>
       </div>

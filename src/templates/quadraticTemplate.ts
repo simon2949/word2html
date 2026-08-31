@@ -66,7 +66,9 @@ const quadraticTemplate: LessonScene = {
     showPointLabel: true, showHelperLines: true, showIndividualDistances: false,
     showDistanceSum: false, showFormula: true, showTrail: false,
     curveColor: '#5B5BD6', focusColor: '#E15C48', pointColor: '#087E8B',
-    helperColor: '#F3A712', lineWidth: 3, pointRadius: 7, fontScale: 1,
+    helperColor: '#F3A712', lineWidth: 3, pointRadius: 7,
+    lineStyle: 'solid', helperLineStyle: 'dashed', helperLineWidth: 2,
+    pointStyle: 'outlined', fontScale: 1,
     animationSpeed: 0.55,
   },
   lineage: {

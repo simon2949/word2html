@@ -1,5 +1,7 @@
 # 多物体弹性碰撞 MVP 验收
 
+> 本文保留早期“已知碰撞时刻的一维解析轨迹”验收。具有真实圆盘半径、接触检测、二维法向冲量和边界反弹的新运行时见 `collision-2d-acceptance.md`；两者不应混用。
+
 关联运行时：`experiment.motion.point-2d@3`  
 接口版本：`lesson-plan-0.4`
 

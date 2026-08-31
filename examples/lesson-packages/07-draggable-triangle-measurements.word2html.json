@@ -1,0 +1,49 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-1.4",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "可拖动三角形的边、角与面积",
+    "templateId": "math.geometry.primitives-2d",
+    "parameterOverrides": {},
+    "geometrySpec": {
+      "formula": "S = 1/2 |(B-A) × (C-A)|",
+      "conclusion": "拖动三个顶点，观察边长、夹角和面积如何随几何位置同步变化。",
+      "parameters": [
+        { "id": "Ax", "label": "A 点横坐标", "value": -3, "min": -8, "max": 8, "step": 0.1 },
+        { "id": "Ay", "label": "A 点纵坐标", "value": -2, "min": -6, "max": 6, "step": 0.1 },
+        { "id": "Bx", "label": "B 点横坐标", "value": 3, "min": -8, "max": 8, "step": 0.1 },
+        { "id": "By", "label": "B 点纵坐标", "value": -2, "min": -6, "max": 6, "step": 0.1 },
+        { "id": "Cx", "label": "C 点横坐标", "value": 1, "min": -8, "max": 8, "step": 0.1 },
+        { "id": "Cy", "label": "C 点纵坐标", "value": 3, "min": -6, "max": 6, "step": 0.1 }
+      ],
+      "points": [
+        { "id": "A", "label": "A", "xExpression": "Ax", "yExpression": "Ay", "draggable": true },
+        { "id": "B", "label": "B", "xExpression": "Bx", "yExpression": "By", "draggable": true },
+        { "id": "C", "label": "C", "xExpression": "Cx", "yExpression": "Cy", "draggable": true }
+      ],
+      "connections": [
+        { "id": "AB", "label": "线段 AB", "kind": "segment", "fromPointId": "A", "toPointId": "B" },
+        { "id": "BC", "label": "向量 BC", "kind": "vector", "fromPointId": "B", "toPointId": "C" },
+        { "id": "AC", "label": "射线 AC", "kind": "ray", "fromPointId": "A", "toPointId": "C" }
+      ],
+      "arcs": [
+        { "id": "angleB", "label": "∠ABC", "centerPointId": "B", "startPointId": "A", "endPointId": "C" }
+      ],
+      "polygons": [
+        { "id": "triangleABC", "label": "三角形 ABC", "pointIds": ["A", "B", "C"], "filled": true }
+      ],
+      "measurements": [
+        { "id": "lengthAB", "label": "AB", "kind": "distance", "pointIds": ["A", "B"], "unit": "" },
+        { "id": "angleABC", "label": "∠ABC", "kind": "angle", "pointIds": ["A", "B", "C"], "unit": "°" },
+        { "id": "areaABC", "label": "面积", "kind": "area", "pointIds": ["A", "B", "C"], "unit": "" }
+      ],
+      "loci": []
+    },
+    "reason": "用统一二维几何原语构造可拖动三角形，并实时计算边长、角度和面积。"
+  }
+}

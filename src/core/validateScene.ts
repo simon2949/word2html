@@ -21,6 +21,23 @@ import {
   TIME_EXPERIMENT_TEMPLATE_ID,
   validateTimeExperimentScene,
 } from './timeExperiment'
+import { objectAppearanceKind } from './objectAppearance'
+import {
+  GEOMETRY_2D_TEMPLATE_ID,
+  validateGeometry2DScene,
+} from './geometry2d'
+import {
+  COLLISION_2D_TEMPLATE_ID,
+  validateCollision2DScene,
+} from './collision2d'
+import {
+  RELATION_CURVE_2D_TEMPLATE_ID,
+  validateRelationCurve2DScene,
+} from './relationCurve2d'
+import {
+  DATA_CHART_2D_TEMPLATE_ID,
+  validateDataChart2DScene,
+} from './dataChart2d'
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -30,6 +47,36 @@ const ajv = new Ajv2020({
 
 const validateSchema = ajv.compile(lessonSceneSchema)
 const allowedFunctions = new Set([...SAFE_MATH_FUNCTIONS, 'distance'])
+const categoricalBindings = new Set([
+  'labelMode',
+  'fromPointId',
+  'toPointId',
+  'centerPointId',
+  'startPointId',
+  'endPointId',
+  'pointIds',
+  'filled',
+  'clockwise',
+  'measurementKind',
+  'mode',
+  'constructionKind',
+  'constructionPointAId',
+  'constructionPointBId',
+  'constructionSourcePointId',
+  'constructionCenterPointId',
+  'constructionLinePointAId',
+  'constructionLinePointBId',
+  'pointConstraintKind',
+  'constraintCenterPointId',
+  'constraintPointAId',
+  'constraintPointBId',
+  'pointId',
+  'parameterId',
+  'values',
+  'xValues',
+  'yValues',
+  'index',
+])
 
 function structuralIssues(value: unknown): SceneValidationIssue[] {
   if (validateSchema(value)) return []
@@ -75,6 +122,19 @@ function expressionIssues(scene: LessonScene): SceneValidationIssue[] {
   SAFE_MATH_CONSTANTS.forEach((identifier) => allowedIdentifiers.add(identifier))
   if (scene.templateRef.id === GENERIC_FUNCTION_TEMPLATE_ID) allowedIdentifiers.add('x')
   if (scene.templateRef.id === TIME_EXPERIMENT_TEMPLATE_ID) allowedIdentifiers.add('t')
+  if (scene.templateRef.id === RELATION_CURVE_2D_TEMPLATE_ID) {
+    allowedIdentifiers.add('x')
+    allowedIdentifiers.add('y')
+    allowedIdentifiers.add('t')
+    allowedIdentifiers.add('theta')
+  }
+
+  if (scene.templateRef.id === DATA_CHART_2D_TEMPLATE_ID) {
+    const chartError = validateDataChart2DScene(scene)
+    if (chartError) {
+      issues.push({ path: '/objects/chart', message: chartError, severity: 'error' })
+    }
+  }
 
   const inspect = (expression: string, path: string) => {
     if (/[;{}[\]`'"=:]|\b(?:new|function|window|document|fetch|import|eval)\b/.test(expression)) {
@@ -97,7 +157,7 @@ function expressionIssues(scene: LessonScene): SceneValidationIssue[] {
   })
   scene.objects.forEach((object, objectIndex) => {
     Object.entries(object.bindings).forEach(([binding, expression]) => {
-      if (binding === 'labelMode') return
+      if (categoricalBindings.has(binding)) return
       inspect(expression, `/objects/${objectIndex}/bindings/${binding}`)
     })
   })
@@ -189,6 +249,22 @@ function semanticIssues(scene: LessonScene): SceneValidationIssue[] {
       })
     }
   }
+  for (const objectId of Object.keys(scene.appearance.objectStyles ?? {})) {
+    const object = scene.objects.find((candidate) => candidate.id === objectId)
+    if (!object) {
+      issues.push({
+        path: `/appearance/objectStyles/${objectId}`,
+        message: `对象外观引用不存在：${objectId}`,
+        severity: 'error',
+      })
+    } else if (!objectAppearanceKind(object)) {
+      issues.push({
+        path: `/appearance/objectStyles/${objectId}`,
+        message: `对象不支持独立外观：${object.role}`,
+        severity: 'error',
+      })
+    }
+  }
   for (const interaction of scene.interactions) {
     if (!objectIds.has(interaction.target)) {
       issues.push({
@@ -256,6 +332,27 @@ function semanticIssues(scene: LessonScene): SceneValidationIssue[] {
     const experimentError = validateTimeExperimentScene(scene)
     if (experimentError) {
       issues.push({ path: '/objects/movingBody', message: experimentError, severity: 'error' })
+    }
+  }
+
+  if (scene.templateRef.id === GEOMETRY_2D_TEMPLATE_ID) {
+    const geometryError = validateGeometry2DScene(scene)
+    if (geometryError) {
+      issues.push({ path: '/objects', message: geometryError, severity: 'error' })
+    }
+  }
+
+  if (scene.templateRef.id === COLLISION_2D_TEMPLATE_ID) {
+    const collisionError = validateCollision2DScene(scene)
+    if (collisionError) {
+      issues.push({ path: '/objects', message: collisionError, severity: 'error' })
+    }
+  }
+
+  if (scene.templateRef.id === RELATION_CURVE_2D_TEMPLATE_ID) {
+    const relationError = validateRelationCurve2DScene(scene)
+    if (relationError) {
+      issues.push({ path: '/objects/relationCurve', message: relationError, severity: 'error' })
     }
   }
 

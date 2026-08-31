@@ -73,6 +73,20 @@ function functionChanges(before: NonNullable<LessonPlan['functionSpec']>, after:
   return changes
 }
 
+function relationChanges(before: NonNullable<LessonPlan['relationSpec']>, after: NonNullable<LessonPlan['relationSpec']>): string[] {
+  const changes: string[] = []
+  changes.push(...changedFields(before, after, [
+    ['mode', '曲线类型'], ['formula', '公式说明'], ['conclusion', '观察结论'],
+    ['xMin', '视口 x 下限'], ['xMax', '视口 x 上限'],
+    ['yMin', '视口 y 下限'], ['yMax', '视口 y 上限'],
+    ['variableMin', '变量下限'], ['variableMax', '变量上限'],
+    ['xExpression', 'x 表达式'], ['yExpression', 'y 表达式'],
+    ['radialExpression', '极径表达式'], ['implicitExpression', '隐函数表达式'],
+  ]))
+  changes.push(...parameterChanges(before.parameters, after.parameters))
+  return changes
+}
+
 function experimentChanges(
   before: NonNullable<LessonPlan['experimentSpec']>,
   after: NonNullable<LessonPlan['experimentSpec']>,
@@ -147,6 +161,82 @@ function experimentChanges(
   return changes
 }
 
+function geometryChanges(
+  before: NonNullable<LessonPlan['geometrySpec']>,
+  after: NonNullable<LessonPlan['geometrySpec']>,
+): string[] {
+  const changes: string[] = []
+  if (before.formula !== after.formula) changes.push('几何公式说明已更新')
+  if (before.conclusion !== after.conclusion) changes.push('观察结论已更新')
+  changes.push(...parameterChanges(before.parameters, after.parameters))
+  changes.push(...collectionChanges(before.points, after.points, '几何点', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['xExpression', 'x 坐标'], ['yExpression', 'y 坐标'], ['draggable', '可拖动'], ['construction', '构造方式'], ['constraint', '运动约束']],
+  )))
+  changes.push(...collectionChanges(before.connections, after.connections, '几何连线', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['kind', '类型'], ['fromPointId', '起点'], ['toPointId', '终点']],
+  )))
+  changes.push(...collectionChanges(before.arcs, after.arcs, '圆弧', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['centerPointId', '中心'], ['startPointId', '起始方向'], ['endPointId', '终止方向'], ['clockwise', '顺时针']],
+  )))
+  changes.push(...collectionChanges(before.polygons, after.polygons, '多边形', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['pointIds', '顶点'], ['filled', '填充']],
+  )))
+  changes.push(...collectionChanges(before.measurements, after.measurements, '几何测量', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['kind', '类型'], ['pointIds', '引用点'], ['expression', '表达式'], ['unit', '单位']],
+  )))
+  changes.push(...collectionChanges(before.loci ?? [], after.loci ?? [], '几何轨迹', (previous, next) => changedFields(
+    previous, next,
+    [['label', '标签'], ['pointId', '目标点'], ['parameterId', '驱动参数'], ['min', '采样下限'], ['max', '采样上限']],
+  )))
+  return changes
+}
+
+function collisionChanges(
+  before: NonNullable<LessonPlan['collisionSpec']>,
+  after: NonNullable<LessonPlan['collisionSpec']>,
+): string[] {
+  const changes: string[] = []
+  if (before.formula !== after.formula) changes.push('碰撞公式说明已更新')
+  if (before.conclusion !== after.conclusion) changes.push('观察结论已更新')
+  changes.push(...changedFields(before, after, [
+    ['durationExpression', '实验时长'],
+    ['gravityXExpression', '水平重力'],
+    ['gravityYExpression', '竖直重力'],
+    ['restitutionExpression', '恢复系数'],
+    ['bounds', '接触边界'],
+  ]))
+  changes.push(...parameterChanges(before.parameters, after.parameters))
+  changes.push(...collectionChanges(before.bodies, after.bodies, '碰撞物体', (previous, next) => changedFields(
+    previous,
+    next,
+    [
+      ['label', '标签'], ['xExpression', '初始 x'], ['yExpression', '初始 y'],
+      ['vxExpression', '初始 vx'], ['vyExpression', '初始 vy'],
+      ['radiusExpression', '半径'], ['massExpression', '质量'],
+    ],
+  )))
+  return changes
+}
+
+function dataChartChanges(
+  before: NonNullable<LessonPlan['dataChartSpec']>,
+  after: NonNullable<LessonPlan['dataChartSpec']>,
+): string[] {
+  const changes = changedFields(before, after, [
+    ['mode', '图表类型'], ['formula', '图表说明'], ['conclusion', '观察结论'],
+    ['xLabel', '横轴名称'], ['yLabel', '纵轴名称'], ['unit', '单位'], ['categories', '类别'],
+  ])
+  changes.push(...collectionChanges(before.series, after.series, '数据系列', (previous, next) => changedFields(
+    previous, next, [['label', '名称'], ['values', '数值'], ['points', '散点']],
+  )))
+  return changes
+}
+
 export function describeLessonPlanChanges(
   before: LessonPlan,
   after: LessonPlan,
@@ -169,8 +259,20 @@ export function describeLessonPlanChanges(
   if (before.functionSpec && after.functionSpec) {
     changes.push(...functionChanges(before.functionSpec, after.functionSpec))
   }
+  if (before.relationSpec && after.relationSpec) {
+    changes.push(...relationChanges(before.relationSpec, after.relationSpec))
+  }
   if (before.experimentSpec && after.experimentSpec) {
     changes.push(...experimentChanges(before.experimentSpec, after.experimentSpec))
+  }
+  if (before.geometrySpec && after.geometrySpec) {
+    changes.push(...geometryChanges(before.geometrySpec, after.geometrySpec))
+  }
+  if (before.collisionSpec && after.collisionSpec) {
+    changes.push(...collisionChanges(before.collisionSpec, after.collisionSpec))
+  }
+  if (before.dataChartSpec && after.dataChartSpec) {
+    changes.push(...dataChartChanges(before.dataChartSpec, after.dataChartSpec))
   }
 
   if (changes.length <= limit) return changes

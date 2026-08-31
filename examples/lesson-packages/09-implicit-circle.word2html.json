@@ -1,0 +1,35 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-1.4",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "隐函数圆与等值线",
+    "templateId": "math.curve.relation-2d",
+    "parameterOverrides": {},
+    "relationSpec": {
+      "mode": "implicit",
+      "formula": "x² + y² = a²",
+      "conclusion": "曲线上的每一点到原点的距离都等于 a；调整 a 可以观察圆的半径变化。",
+      "parameters": [
+        {
+          "id": "a",
+          "label": "圆的半径 a",
+          "value": 3,
+          "min": 1,
+          "max": 5,
+          "step": 0.25
+        }
+      ],
+      "xMin": -6,
+      "xMax": 6,
+      "yMin": -6,
+      "yMax": 6,
+      "implicitExpression": "x^2+y^2-a^2"
+    },
+    "reason": "使用本地隐函数等值线运行时演示圆的点集定义，不包含模型生成的采样点或代码。"
+  }
+}

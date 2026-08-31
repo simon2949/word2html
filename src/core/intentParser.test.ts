@@ -21,8 +21,18 @@ describe('generation request router', () => {
     expect(routeGenerationRequest('把曲线改成红色').kind).toBe('settings')
   })
 
-  it('routes unsupported teaching content to the model gateway', () => {
-    expect(routeGenerationRequest('模拟自由落体运动').kind).toBe('model')
+  it('routes supported dynamic content through a registered runtime', () => {
+    const route = routeGenerationRequest('模拟自由落体运动')
+    expect(route.kind).toBe('model')
+    expect(route.requiredCapabilities[0]?.id).toBe('physics.motion.point-2d')
+    expect(route.willCallModel).toBe(true)
+  })
+
+  it('stops known unsupported content before spending model tokens', () => {
+    const route = routeGenerationRequest('展示酸碱中和过程')
+    expect(route.kind).toBe('unsupported')
+    expect(route.willCallModel).toBe(false)
+    expect(route.missingCapabilities.map((item) => item.label)).toContain('实验容器')
   })
 
   it('keeps structural follow-up instructions eligible for contextual model editing', () => {

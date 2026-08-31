@@ -6,7 +6,19 @@ import {
   pointOnEllipse,
   type Point2D,
 } from '../core/ellipse'
+import {
+  helperLineStyleOf,
+  helperLineWidthOf,
+  lineDashArray,
+  lineWidthOf,
+  lineStyleOf,
+  objectColorOf,
+  objectVisibleOf,
+  pointRadiusOf,
+  pointSvgAppearance,
+} from '../core/appearanceStyles'
 import type { LessonScene } from '../types/lessonScene'
+import { sceneObjectSelectionProps } from './sceneObjectSelection'
 import {
   coordinateTicks,
   createPlotTransform,
@@ -22,6 +34,8 @@ interface EllipseCanvasProps {
   trailAngles: number[]
   zoom: number
   onAngleChange: (angle: number) => void
+  selectedObjectId?: string | null
+  onObjectSelect?: (objectId: string) => void
 }
 
 const SVG_WIDTH = 900
@@ -41,6 +55,8 @@ export function EllipseCanvas({
   trailAngles,
   zoom,
   onAngleChange,
+  selectedObjectId,
+  onObjectSelect,
 }: EllipseCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -71,6 +87,17 @@ export function EllipseCanvas({
   const gridColor = dark ? '#2D3B47' : '#E7EAF0'
   const axisColor = dark ? '#7D8D9C' : '#9AA3AE'
   const textColor = dark ? '#E8EEF3' : '#36404A'
+  const ellipseLineWidth = lineWidthOf(appearance, 'ellipse')
+  const ellipseLineStyle = lineStyleOf(appearance, 'ellipse')
+  const ellipseColor = objectColorOf(appearance, 'ellipse', appearance.curveColor)
+  const helperLineWidth = helperLineWidthOf(appearance, 2.25)
+  const helperLineStyle = helperLineStyleOf(appearance, 'dashed')
+  const pointRadius = pointRadiusOf(appearance, 'point')
+  const focusLeftRadius = pointRadiusOf(appearance, 'focusLeft')
+  const focusRightRadius = pointRadiusOf(appearance, 'focusRight')
+  const pointAppearance = pointSvgAppearance(appearance, appearance.pointColor, background, 'ellipse-point-shadow', 'point')
+  const focusLeftAppearance = pointSvgAppearance(appearance, appearance.focusColor, background, 'ellipse-point-shadow', 'focusLeft')
+  const focusRightAppearance = pointSvgAppearance(appearance, appearance.focusColor, background, 'ellipse-point-shadow', 'focusRight')
 
   const updateFromPointer = (event: ReactPointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current
@@ -84,6 +111,7 @@ export function EllipseCanvas({
   }
 
   const handlePointerDown = (event: ReactPointerEvent<SVGCircleElement>) => {
+    onObjectSelect?.('point')
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragging(true)
   }
@@ -110,6 +138,11 @@ export function EllipseCanvas({
         onPointerLeave={stopDragging}
       >
         <title>椭圆焦点距离和交互图</title>
+        <defs>
+          <filter id="ellipse-point-shadow" x="-80%" y="-80%" width="260%" height="260%">
+            <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.38" />
+          </filter>
+        </defs>
         <rect width={SVG_WIDTH} height={SVG_HEIGHT} rx="22" fill={background} />
 
         {appearance.showGrid && (
@@ -151,69 +184,99 @@ export function EllipseCanvas({
           </g>
         )}
 
-        {appearance.showTrail && trailAngles.length > 1 && (
+        {appearance.showTrail && objectVisibleOf(appearance, 'trail') && trailAngles.length > 1 && (
           <polyline
+            {...sceneObjectSelectionProps('trail', '运动轨迹', selectedObjectId, onObjectSelect)}
+            data-appearance-role="trail"
             points={trailAngles
               .map((trailAngle) => toSvg(pointOnEllipse(geometry, trailAngle)))
               .map((trailPoint) => `${trailPoint.x},${trailPoint.y}`)
               .join(' ')}
             fill="none"
-            stroke={appearance.pointColor}
-            strokeWidth="6"
+            stroke={objectColorOf(appearance, 'trail', appearance.pointColor)}
+            strokeWidth={lineWidthOf(appearance, 'trail')}
+            strokeDasharray={lineDashArray(lineStyleOf(appearance, 'trail'), lineWidthOf(appearance, 'trail'))}
             strokeLinecap="round"
             opacity="0.18"
             aria-hidden="true"
           />
         )}
 
-        <ellipse
+        {objectVisibleOf(appearance, 'ellipse') && <ellipse
+          {...sceneObjectSelectionProps('ellipse', '椭圆', selectedObjectId, onObjectSelect)}
+          data-appearance-role="main-line"
           cx={origin.x}
           cy={origin.y}
           rx={ellipseRx}
           ry={ellipseRy}
           fill="none"
-          stroke={appearance.curveColor}
-          strokeWidth={appearance.lineWidth}
-        />
+          stroke={ellipseColor}
+          strokeWidth={ellipseLineWidth}
+          strokeDasharray={lineDashArray(ellipseLineStyle, ellipseLineWidth)}
+          strokeLinecap="round"
+        />}
 
         {appearance.showHelperLines && (
-          <g stroke={appearance.helperColor} strokeWidth="2.25" strokeDasharray="7 6">
-            <line x1={focusLeft.x} y1={focusLeft.y} x2={point.x} y2={point.y} />
-            <line x1={focusRight.x} y1={focusRight.y} x2={point.x} y2={point.y} />
+          <g
+            data-appearance-role="helper-lines"
+            stroke={appearance.helperColor}
+            strokeWidth={helperLineWidth}
+            strokeDasharray={lineDashArray(helperLineStyle, helperLineWidth)}
+            strokeLinecap="round"
+          >
+            {objectVisibleOf(appearance, 'distanceLeft') && <line
+              {...sceneObjectSelectionProps('distanceLeft', '左焦点距离线', selectedObjectId, onObjectSelect)}
+              x1={focusLeft.x} y1={focusLeft.y} x2={point.x} y2={point.y}
+              stroke={objectColorOf(appearance, 'distanceLeft', appearance.helperColor)}
+              strokeWidth={helperLineWidthOf(appearance, 2.25, 'distanceLeft')}
+              strokeDasharray={lineDashArray(helperLineStyleOf(appearance, 'dashed', 'distanceLeft'), helperLineWidthOf(appearance, 2.25, 'distanceLeft'))}
+            />}
+            {objectVisibleOf(appearance, 'distanceRight') && <line
+              {...sceneObjectSelectionProps('distanceRight', '右焦点距离线', selectedObjectId, onObjectSelect)}
+              x1={focusRight.x} y1={focusRight.y} x2={point.x} y2={point.y}
+              stroke={objectColorOf(appearance, 'distanceRight', appearance.helperColor)}
+              strokeWidth={helperLineWidthOf(appearance, 2.25, 'distanceRight')}
+              strokeDasharray={lineDashArray(helperLineStyleOf(appearance, 'dashed', 'distanceRight'), helperLineWidthOf(appearance, 2.25, 'distanceRight'))}
+            />}
           </g>
         )}
 
-        <g fill={appearance.focusColor}>
-          <circle cx={focusLeft.x} cy={focusLeft.y} r={appearance.pointRadius - 1} />
-          <circle cx={focusRight.x} cy={focusRight.y} r={appearance.pointRadius - 1} />
+        <g data-appearance-role="secondary-points">
+          {objectVisibleOf(appearance, 'focusLeft') && <circle
+            {...sceneObjectSelectionProps('focusLeft', '左焦点', selectedObjectId, onObjectSelect)}
+            cx={focusLeft.x} cy={focusLeft.y} r={Math.max(2, focusLeftRadius - 1)} {...focusLeftAppearance}
+          />}
+          {objectVisibleOf(appearance, 'focusRight') && <circle
+            {...sceneObjectSelectionProps('focusRight', '右焦点', selectedObjectId, onObjectSelect)}
+            cx={focusRight.x} cy={focusRight.y} r={Math.max(2, focusRightRadius - 1)} {...focusRightAppearance}
+          />}
         </g>
 
         {appearance.showFocusLabels && (
           <g fill={textColor} fontSize={14 * appearance.fontScale} fontWeight="650">
-            <text x={focusLeft.x - 8} y={focusLeft.y - 13} textAnchor="middle">F₁</text>
-            <text x={focusRight.x + 8} y={focusRight.y - 13} textAnchor="middle">F₂</text>
+            {objectVisibleOf(appearance, 'focusLeft') && <text x={focusLeft.x - focusLeftRadius} y={focusLeft.y - focusLeftRadius - 6} textAnchor="middle">F₁</text>}
+            {objectVisibleOf(appearance, 'focusRight') && <text x={focusRight.x + focusRightRadius} y={focusRight.y - focusRightRadius - 6} textAnchor="middle">F₂</text>}
           </g>
         )}
 
         {appearance.showIndividualDistances && appearance.showHelperLines && (
           <g fill={textColor} fontSize={13 * appearance.fontScale} fontWeight="650">
-            <text className="distance-label" x={leftLabel.x} y={leftLabel.y - 10} textAnchor="middle">
+            {objectVisibleOf(appearance, 'distanceLeft') && <text className="distance-label" x={leftLabel.x} y={leftLabel.y - 10} textAnchor="middle">
               {snapshot.distanceLeft.toFixed(2)}
-            </text>
-            <text className="distance-label" x={rightLabel.x} y={rightLabel.y - 10} textAnchor="middle">
+            </text>}
+            {objectVisibleOf(appearance, 'distanceRight') && <text className="distance-label" x={rightLabel.x} y={rightLabel.y - 10} textAnchor="middle">
               {snapshot.distanceRight.toFixed(2)}
-            </text>
+            </text>}
           </g>
         )}
 
-        <circle
-          className="draggable-point"
+        {objectVisibleOf(appearance, 'point') && <circle
+          {...sceneObjectSelectionProps('point', '椭圆动点', selectedObjectId, onObjectSelect, 'draggable-point')}
+          data-appearance-role="primary-point"
           cx={point.x}
           cy={point.y}
-          r={appearance.pointRadius + (dragging ? 2 : 0)}
-          fill={appearance.pointColor}
-          stroke={dark ? '#17212B' : '#FFFFFF'}
-          strokeWidth="3"
+          r={pointRadius + (dragging ? 2 : 0)}
+          {...pointAppearance}
           tabIndex={0}
           role="slider"
           aria-label="椭圆上的动点 P"
@@ -222,6 +285,7 @@ export function EllipseCanvas({
           aria-valuenow={Math.round((angle * 180) / Math.PI)}
           onPointerDown={handlePointerDown}
           onKeyDown={(event) => {
+            onObjectSelect?.('point')
             if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
               event.preventDefault()
               onAngleChange(angle - 0.05)
@@ -231,12 +295,12 @@ export function EllipseCanvas({
               onAngleChange(angle + 0.05)
             }
           }}
-        />
+        />}
 
-        {appearance.showPointLabel && (
+        {appearance.showPointLabel && objectVisibleOf(appearance, 'point') && (
           <text
-            x={point.x + 15}
-            y={point.y - 14}
+            x={point.x + pointRadius + 8}
+            y={point.y - pointRadius - 7}
             fill={textColor}
             fontSize={15 * appearance.fontScale}
             fontWeight="750"

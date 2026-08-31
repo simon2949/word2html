@@ -93,6 +93,27 @@ describe('TimeExperimentCanvas vectors', () => {
     expect(html).toContain('右球(2.00, 0.00)')
   })
 
+  it('exposes final-point coordinate snapping only for moving math trajectory bodies', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'moving', bodyLabel: 'P',
+      xExpression: 't', yExpression: 't^2', formula: 'x=t, y=t²',
+      conclusion: '拖动点沿轨迹改变共同参数。', parameters: [], metrics: [], vectors: [],
+      additionalBodies: [{ id: 'fixed', label: 'F', xExpression: '2', yExpression: '0' }],
+    }, {
+      title: '可拖动参数轨迹', topic: '参数轨迹', subject: 'math', summary: '测试轨迹拖点。',
+    })
+    const html = renderToStaticMarkup(createElement(TimeExperimentCanvas, {
+      scene, time: 1, zoom: 1, onTimeChange: () => undefined,
+    }))
+
+    expect(html).toContain('aria-label="轨迹坐标吸附"')
+    expect(html).toContain('data-time-trace-snap-step="0.5"')
+    expect(html).toContain('data-time-trace-snap-axis=""')
+    expect(html).toMatch(/data-body-id="moving"[^>]*data-trace-draggable="true"/)
+    expect(html).toMatch(/data-body-id="moving"[^>]*data-world-x="1"[^>]*data-world-y="1"/)
+    expect(html).toMatch(/data-body-id="fixed"[^>]*data-trace-draggable="false"/)
+  })
+
   it('renders rope and spring constraint primitives with fixed anchors', () => {
     const scene = createTimeExperimentScene({
       durationExpression: '4', bodyId: 'block', bodyLabel: '滑块',

@@ -84,6 +84,19 @@ export interface TimeExperimentRuntime {
   }>
 }
 
+export type TimeTraceSnapStep = 0 | 0.1 | 0.5 | 1
+
+export interface NearestTrajectoryTimeResult {
+  time: number
+  targetX: number
+  targetY: number
+  bodyX: number
+  bodyY: number
+  distance: number
+  snappedAxis: 'x' | 'y' | null
+  snappedCoordinate?: number
+}
+
 const RESERVED_IDENTIFIERS = new Set([
   't', 'pi', 'e', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln', 'min', 'max', 'pow', 'step',
 ])
@@ -437,6 +450,143 @@ export function sampleTimeExperiment(scene: LessonScene, endTime?: number, count
   return createTimeExperimentRuntime(scene).sample(endTime, count)
 }
 
+function snapTraceCoordinate(value: number, step: TimeTraceSnapStep): number {
+  return step === 0 ? value : Number((Math.round(value / step) * step).toFixed(10))
+}
+
+export function nearestTimeOnTrajectory(
+  runtime: TimeExperimentRuntime,
+  bodyId: string,
+  target: { x: number; y: number },
+  snapStep: TimeTraceSnapStep = 0,
+  sampleCount = 721,
+): NearestTrajectoryTimeResult {
+  if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new Error('轨迹拖动目标必须是有限坐标。')
+  const targetX = snapTraceCoordinate(target.x, snapStep)
+  const targetY = snapTraceCoordinate(target.y, snapStep)
+  const count = Math.max(81, Math.min(2001, Math.trunc(sampleCount)))
+  const samples = runtime.sampleBodies(runtime.duration, count)
+  const bodyAt = (time: number) => {
+    const body = runtime.snapshot(time).bodies.find((candidate) => candidate.id === bodyId)
+    if (!body) throw new Error(`轨迹中不存在运动物体：${bodyId}`)
+    return body
+  }
+  const distanceSquared = (body: { x: number; y: number }) => (
+    (body.x - target.x) ** 2 + (body.y - target.y) ** 2
+  )
+  const distanceSquaredAt = (time: number) => {
+    const body = bodyAt(time)
+    return { body, value: distanceSquared(body) }
+  }
+  let bestIndex = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  samples.forEach((sample, index) => {
+    const body = sample.bodies.find((candidate) => candidate.id === bodyId)
+    if (!body) throw new Error(`轨迹中不存在运动物体：${bodyId}`)
+    const value = distanceSquared(body)
+    if (value < bestDistance) { bestDistance = value; bestIndex = index }
+  })
+  let left = samples[Math.max(0, bestIndex - 1)]!.t
+  let right = samples[Math.min(samples.length - 1, bestIndex + 1)]!.t
+  for (let iteration = 0; iteration < 28; iteration += 1) {
+    const first = left + (right - left) / 3
+    const second = right - (right - left) / 3
+    if (distanceSquaredAt(first).value <= distanceSquaredAt(second).value) right = second
+    else left = first
+  }
+  const continuousTime = (left + right) / 2
+  const continuous = distanceSquaredAt(continuousTime)
+  if (snapStep === 0) {
+    return {
+      time: continuousTime,
+      targetX,
+      targetY,
+      bodyX: continuous.body.x,
+      bodyY: continuous.body.y,
+      distance: Math.sqrt(continuous.value),
+      snappedAxis: null,
+    }
+  }
+
+  type SnapCandidate = {
+    time: number
+    body: ReturnType<typeof bodyAt>
+    axis: 'x' | 'y'
+    coordinate: number
+    distanceSquared: number
+  }
+  const candidates: SnapCandidate[] = []
+  const addRoot = (axis: 'x' | 'y', coordinate: number, rootTime: number) => {
+    const time = Math.min(runtime.duration, Math.max(0, rootTime))
+    if (candidates.some((candidate) => candidate.axis === axis
+      && candidate.coordinate === coordinate
+      && Math.abs(candidate.time - time) <= Math.max(1e-9, runtime.duration * 1e-8))) return
+    const body = bodyAt(time)
+    candidates.push({ time, body, axis, coordinate, distanceSquared: distanceSquared(body) })
+  }
+  const rootsFor = (axis: 'x' | 'y', coordinate: number) => {
+    const valueAtSample = (sample: TimeExperimentSnapshot['bodies'][number]) => sample[axis] - coordinate
+    for (let index = 0; index < samples.length - 1; index += 1) {
+      const firstSample = samples[index]!
+      const secondSample = samples[index + 1]!
+      const firstBody = firstSample.bodies.find((candidate) => candidate.id === bodyId)!
+      const secondBody = secondSample.bodies.find((candidate) => candidate.id === bodyId)!
+      const firstValue = valueAtSample(firstBody)
+      const secondValue = valueAtSample(secondBody)
+      if (Math.abs(firstValue) <= 1e-10) addRoot(axis, coordinate, firstSample.t)
+      if (firstValue * secondValue > 0) continue
+      if (Math.abs(secondValue) <= 1e-10) {
+        addRoot(axis, coordinate, secondSample.t)
+        continue
+      }
+      let rootLeft = firstSample.t
+      let rootRight = secondSample.t
+      let leftValue = firstValue
+      for (let iteration = 0; iteration < 36; iteration += 1) {
+        const middle = (rootLeft + rootRight) / 2
+        const middleValue = bodyAt(middle)[axis] - coordinate
+        if (Math.abs(middleValue) <= 1e-12) {
+          rootLeft = middle
+          rootRight = middle
+          break
+        }
+        if (leftValue * middleValue <= 0) rootRight = middle
+        else {
+          rootLeft = middle
+          leftValue = middleValue
+        }
+      }
+      addRoot(axis, coordinate, (rootLeft + rootRight) / 2)
+    }
+  }
+  ;(['x', 'y'] as const).forEach((axis) => {
+    const centers = [continuous.body[axis], target[axis]].map((value) => snapTraceCoordinate(value, snapStep))
+    const coordinates = new Set<number>()
+    centers.forEach((center) => {
+      for (let offset = -2; offset <= 2; offset += 1) {
+        coordinates.add(Number((center + offset * snapStep).toFixed(10)))
+      }
+    })
+    coordinates.forEach((coordinate) => rootsFor(axis, coordinate))
+  })
+  const snapped = candidates.reduce<SnapCandidate | null>(
+    (best, candidate) => !best || candidate.distanceSquared < best.distanceSquared ? candidate : best,
+    null,
+  )
+  const time = snapped?.time ?? continuousTime
+  const nearest = snapped ? { body: snapped.body, value: snapped.distanceSquared } : continuous
+  return {
+    time,
+    targetX,
+    targetY,
+    bodyX: nearest.body.x,
+    bodyY: nearest.body.y,
+    distance: Math.sqrt(nearest.value),
+    snappedAxis: snapped?.axis ?? null,
+    snappedCoordinate: snapped?.coordinate,
+  }
+}
+
 export function estimateTimeExperimentViewport(scene: LessonScene): LessonScene['viewport'] {
   const runtime = createTimeExperimentRuntime(scene)
   const samples = runtime.sample(undefined, 121)
@@ -499,7 +649,9 @@ export function resetTimeExperimentScene(scene: LessonScene): LessonScene {
     showHelperLines: next.objects.some((object) => object.kind === 'vector' || object.kind === 'constraint'),
     showFormula: true, showTrail: true, curveColor: '#5B5BD6',
     pointColor: '#E15C48', helperColor: '#64748B', lineWidth: 3,
-    pointRadius: 8, fontScale: 1, animationSpeed: 0.55,
+    pointRadius: 8, lineStyle: 'solid', helperLineStyle: 'solid',
+    helperLineWidth: 3, pointStyle: 'shadow', fontScale: 1, animationSpeed: 0.55,
+    objectStyles: {},
   }
   next.viewport = estimateTimeExperimentViewport(next)
   next.lineage.updatedAt = new Date().toISOString()

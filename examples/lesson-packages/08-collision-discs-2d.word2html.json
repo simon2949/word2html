@@ -1,0 +1,74 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-1.4",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "physics",
+    "topic": "二维圆盘接触与碰撞",
+    "templateId": "physics.collision.discs-2d",
+    "parameterOverrides": {},
+    "collisionSpec": {
+      "durationExpression": "duration",
+      "gravityXExpression": "0",
+      "gravityYExpression": "0",
+      "restitutionExpression": "restitution",
+      "formula": "Σp(碰前) = Σp(碰后)",
+      "conclusion": "没有外力和边界冲量时系统总动量守恒；恢复系数决定碰撞后法向相对速度。",
+      "parameters": [
+        { "id": "duration", "label": "实验时长", "value": 6, "min": 2, "max": 10, "step": 0.25 },
+        { "id": "restitution", "label": "恢复系数", "value": 0.9, "min": 0, "max": 1, "step": 0.05 },
+        { "id": "massA", "label": "圆盘 A 质量（kg）", "value": 1, "min": 0.25, "max": 5, "step": 0.25 },
+        { "id": "vxA", "label": "圆盘 A 水平初速度 vx（m/s）", "value": 3, "min": -5, "max": 5, "step": 0.25 },
+        { "id": "vyA", "label": "圆盘 A 竖直初速度 vy（m/s）", "value": 0.75, "min": -5, "max": 5, "step": 0.25 },
+        { "id": "massB", "label": "圆盘 B 质量（kg）", "value": 2, "min": 0.25, "max": 5, "step": 0.25 },
+        { "id": "vxB", "label": "圆盘 B 水平初速度 vx（m/s）", "value": -0.5, "min": -5, "max": 5, "step": 0.25 },
+        { "id": "vyB", "label": "圆盘 B 竖直初速度 vy（m/s）", "value": 0, "min": -5, "max": 5, "step": 0.25 },
+        { "id": "massC", "label": "圆盘 C 质量（kg）", "value": 1.5, "min": 0.25, "max": 5, "step": 0.25 },
+        { "id": "vxC", "label": "圆盘 C 水平初速度 vx（m/s）", "value": -1, "min": -5, "max": 5, "step": 0.25 },
+        { "id": "vyC", "label": "圆盘 C 竖直初速度 vy（m/s）", "value": 1, "min": -5, "max": 5, "step": 0.25 }
+      ],
+      "bounds": {
+        "xMinExpression": "0-8",
+        "xMaxExpression": "8",
+        "yMinExpression": "0-5",
+        "yMaxExpression": "5"
+      },
+      "bodies": [
+        {
+          "id": "discA",
+          "label": "圆盘 A",
+          "xExpression": "0-4",
+          "yExpression": "0-1",
+          "vxExpression": "vxA",
+          "vyExpression": "vyA",
+          "radiusExpression": "0.6",
+          "massExpression": "massA"
+        },
+        {
+          "id": "discB",
+          "label": "圆盘 B",
+          "xExpression": "0",
+          "yExpression": "0",
+          "vxExpression": "vxB",
+          "vyExpression": "vyB",
+          "radiusExpression": "0.6",
+          "massExpression": "massB"
+        },
+        {
+          "id": "discC",
+          "label": "圆盘 C",
+          "xExpression": "3",
+          "yExpression": "0-2",
+          "vxExpression": "vxC",
+          "vyExpression": "vyC",
+          "radiusExpression": "0.55",
+          "massExpression": "massC"
+        }
+      ]
+    },
+    "reason": "用确定性二维接触求解器演示多体碰撞、边界反弹、动量和动能变化。"
+  }
+}

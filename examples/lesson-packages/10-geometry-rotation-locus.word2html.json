@@ -1,0 +1,54 @@
+{
+  "format": "word2html.lesson-package",
+  "formatVersion": "0.1",
+  "kind": "lesson-plan",
+  "apiVersion": "lesson-plan-1.4",
+  "plan": {
+    "schemaVersion": "0.1",
+    "status": "matched",
+    "subject": "math",
+    "topic": "旋转、圆周轨迹与垂足",
+    "templateId": "math.geometry.primitives-2d",
+    "parameterOverrides": {},
+    "geometrySpec": {
+      "formula": "R = Rotate(O, A, θ)，OR = OA",
+      "conclusion": "点 A 绕中心 O 旋转 θ 得到 R；当 θ 取完整范围时，R 的轨迹是以 O 为圆心、OA 为半径的圆。",
+      "parameters": [
+        { "id": "theta", "label": "旋转角 θ（弧度）", "value": 0.8, "min": -3.141592653589793, "max": 3.141592653589793, "step": 0.05 },
+        { "id": "Px", "label": "约束点 P 横坐标", "value": 2.2, "min": -5, "max": 5, "step": 0.1 },
+        { "id": "Py", "label": "约束点 P 纵坐标", "value": 1.8, "min": -5, "max": 5, "step": 0.1 },
+        { "id": "k", "label": "位似比 k", "value": 0.6, "min": 0.2, "max": 1.8, "step": 0.1 }
+      ],
+      "points": [
+        { "id": "O", "label": "O", "xExpression": "0", "yExpression": "0" },
+        { "id": "X", "label": "X", "xExpression": "1", "yExpression": "0" },
+        { "id": "A", "label": "A", "xExpression": "3", "yExpression": "0" },
+        { "id": "P", "label": "P", "xExpression": "Px", "yExpression": "Py", "draggable": true, "constraint": { "kind": "circle", "centerPointId": "O", "radiusExpression": "3" } },
+        { "id": "R", "label": "R", "construction": { "kind": "rotation", "sourcePointId": "A", "centerPointId": "O", "angleExpression": "theta" } },
+        { "id": "M", "label": "M", "construction": { "kind": "midpoint", "pointAId": "A", "pointBId": "R" } },
+        { "id": "H", "label": "H", "construction": { "kind": "projection", "sourcePointId": "R", "linePointAId": "O", "linePointBId": "X" } },
+        { "id": "S", "label": "S", "construction": { "kind": "reflection", "sourcePointId": "R", "linePointAId": "O", "linePointBId": "X" } },
+        { "id": "D", "label": "D", "construction": { "kind": "dilation", "sourcePointId": "R", "centerPointId": "O", "scaleExpression": "k" } }
+      ],
+      "connections": [
+        { "id": "OA", "label": "OA", "kind": "segment", "fromPointId": "O", "toPointId": "A" },
+        { "id": "OR", "label": "OR", "kind": "segment", "fromPointId": "O", "toPointId": "R" },
+        { "id": "RH", "label": "垂线 RH", "kind": "segment", "fromPointId": "R", "toPointId": "H" },
+        { "id": "RS", "label": "对称连线 RS", "kind": "segment", "fromPointId": "R", "toPointId": "S" },
+        { "id": "OP", "label": "圆半径 OP", "kind": "segment", "fromPointId": "O", "toPointId": "P" }
+      ],
+      "arcs": [
+        { "id": "angleAOR", "label": "旋转角 θ", "centerPointId": "O", "startPointId": "A", "endPointId": "R" }
+      ],
+      "polygons": [],
+      "measurements": [
+        { "id": "OR", "label": "OR", "kind": "distance", "pointIds": ["O", "R"], "unit": "" },
+        { "id": "angleAOR", "label": "∠AOR", "kind": "angle", "pointIds": ["A", "O", "R"], "unit": "°" }
+      ],
+      "loci": [
+        { "id": "rotationCircle", "label": "点 R 的圆周轨迹", "pointId": "R", "parameterId": "theta" }
+      ]
+    },
+    "reason": "用声明式构造依赖演示旋转、中点、垂足、轴对称、位似、圆约束拖动与本地采样轨迹。"
+  }
+}

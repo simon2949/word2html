@@ -3,7 +3,9 @@ import { createTimeExperimentScene } from '../templates/timeExperimentTemplate'
 import { isNumberParameter } from '../types/lessonScene'
 import { validateLessonScene } from './validateScene'
 import {
+  createTimeExperimentRuntime,
   getTimeExperimentSnapshot,
+  nearestTimeOnTrajectory,
   resetTimeExperimentScene,
   sampleTimeExperiment,
   updateTimeExperimentParameter,
@@ -248,5 +250,50 @@ describe('generic time experiment runtime', () => {
     state = getTimeExperimentSnapshot(scene, 0.8)
     expect(state.constraints.map((constraint) => constraint.restLength)).toEqual([2.2, 1])
     expect(isNumberParameter(scene.parameters.L2) && scene.parameters.L2.value).toBe(1)
+  })
+
+  it('snaps a point on the shared trajectory to an x or y grid coordinate', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'primary', bodyLabel: 'P',
+      xExpression: 't', yExpression: 't^2', formula: 'x=t, y=t²',
+      conclusion: '拖动点沿参数轨迹改变共同时间。', parameters: [], metrics: [], vectors: [],
+      additionalBodies: [{ id: 'mirror', label: 'Q', xExpression: '0-t', yExpression: 't^2' }],
+    }, {
+      title: '参数抛物线', topic: '参数轨迹', subject: 'math', summary: '测试拖动投影。',
+    })
+    const runtime = createTimeExperimentRuntime(scene)
+    const result = nearestTimeOnTrajectory(runtime, 'primary', { x: 2.16, y: 4.18 }, 0.5)
+    const snapshot = runtime.snapshot(result.time)
+
+    expect(result.targetX).toBe(2)
+    expect(result.targetY).toBe(4)
+    expect(result.time).toBeCloseTo(2, 4)
+    expect(result.bodyX).toBeCloseTo(2, 4)
+    expect(result.bodyY).toBeCloseTo(4, 4)
+    expect(['x', 'y']).toContain(result.snappedAxis)
+    expect(result.snappedCoordinate).toBeDefined()
+    expect(snapshot.bodies.find((body) => body.id === 'mirror')).toMatchObject({
+      x: expect.closeTo(-2, 4), y: expect.closeTo(4, 4),
+    })
+  })
+
+  it('snaps the final trajectory point instead of only rounding the pointer target', () => {
+    const scene = createTimeExperimentScene({
+      durationExpression: '4', bodyId: 'primary', bodyLabel: 'P',
+      xExpression: 't+0.3', yExpression: 't^2+0.3', formula: 'x=t+0.3, y=t²+0.3',
+      conclusion: '动点坐标吸附到网格。', parameters: [], metrics: [], vectors: [],
+    }, {
+      title: '偏移参数抛物线', topic: '参数轨迹', subject: 'math', summary: '验证最终点坐标吸附。',
+    })
+    const result = nearestTimeOnTrajectory(
+      createTimeExperimentRuntime(scene),
+      'primary',
+      { x: 2.22, y: 4.6 },
+      1,
+    )
+
+    expect(result.snappedAxis).not.toBeNull()
+    const snappedValue = result.snappedAxis === 'x' ? result.bodyX : result.bodyY
+    expect(snappedValue).toBeCloseTo(Math.round(snappedValue), 7)
   })
 })

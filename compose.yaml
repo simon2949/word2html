@@ -1,0 +1,133 @@
+x-word2html-image: &word2html-image
+  image: "${WORD2HTML_IMAGE:-word2html:local}"
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+x-model-environment: &model-environment
+  WORD2HTML_MODEL_PROVIDER: "${WORD2HTML_MODEL_PROVIDER:-MiniMax}"
+  WORD2HTML_MODEL_PROTOCOL: "${WORD2HTML_MODEL_PROTOCOL:-anthropic-compatible}"
+  WORD2HTML_MODEL_BASE_URL: "${WORD2HTML_MODEL_BASE_URL:-https://api.minimaxi.com/anthropic}"
+  WORD2HTML_MODEL_MODEL: "${WORD2HTML_MODEL_MODEL:-MiniMax-M3}"
+  WORD2HTML_MODEL_MAX_TOKENS: "${WORD2HTML_MODEL_MAX_TOKENS:-2048}"
+  WORD2HTML_MODEL_TIMEOUT_MS: "${WORD2HTML_MODEL_TIMEOUT_MS:-120000}"
+  WORD2HTML_MODEL_TEMPERATURE: "${WORD2HTML_MODEL_TEMPERATURE:-1}"
+  WORD2HTML_MODEL_INPUT_COST_PER_MILLION_USD: "${WORD2HTML_MODEL_INPUT_COST_PER_MILLION_USD:-0}"
+  WORD2HTML_MODEL_OUTPUT_COST_PER_MILLION_USD: "${WORD2HTML_MODEL_OUTPUT_COST_PER_MILLION_USD:-0}"
+
+services:
+  app:
+    <<: *word2html-image
+    init: true
+    restart: unless-stopped
+    user: node
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stop_grace_period: 20s
+    environment:
+      <<: *model-environment
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "5173"
+      WORD2HTML_MODEL_API_KEY_FILE: /run/secrets/model-api-key
+      WORD2HTML_ADMIN_TOKEN_FILE: /run/secrets/admin-token
+      WORD2HTML_USER_SESSION_SECRET_FILE: /run/secrets/user-session-secret
+      WORD2HTML_MODEL_USAGE_HASH_SECRET_FILE: /run/secrets/model-usage-hash-secret
+      WORD2HTML_SECURE_COOKIES: "true"
+      WORD2HTML_TRUST_PROXY: "true"
+      WORD2HTML_STORAGE_BACKEND: json
+      WORD2HTML_MAINTENANCE_MODE: "false"
+      WORD2HTML_OPERATIONAL_EVENT_LIMIT: "${WORD2HTML_OPERATIONAL_EVENT_LIMIT:-200}"
+      WORD2HTML_USER_DIRECTORY_FILE: /var/lib/word2html-volume/data/users.json
+      WORD2HTML_LIBRARY_FILE: /var/lib/word2html-volume/data/lesson-directory.json
+      WORD2HTML_CAPABILITY_REVIEWS_FILE: /var/lib/word2html-volume/data/capability-subject-reviews.json
+      WORD2HTML_MODEL_SETTINGS_FILE: /var/lib/word2html-volume/data/model-settings.json
+      WORD2HTML_USER_DAILY_CALLS: "${WORD2HTML_USER_DAILY_CALLS:-20}"
+      WORD2HTML_USER_DAILY_TOKENS: "${WORD2HTML_USER_DAILY_TOKENS:-100000}"
+    expose:
+      - "5173"
+    volumes:
+      - word2html-data:/var/lib/word2html-volume
+      - type: bind
+        source: "${WORD2HTML_SECRETS_DIR:-./deploy/secrets}"
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=67108864
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      WORD2HTML_DOMAIN: "${WORD2HTML_DOMAIN:-localhost}"
+    ports:
+      - "${WORD2HTML_HTTP_PORT:-80}:80"
+      - "${WORD2HTML_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  maintenance:
+    <<: *word2html-image
+    profiles:
+      - maintenance
+    user: node
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    environment:
+      <<: *model-environment
+      NODE_ENV: production
+    volumes:
+      - word2html-data:/var/lib/word2html-volume
+      - "${WORD2HTML_BACKUP_DIRECTORY:-word2html-backups}:/var/backups/word2html-volume"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=67108864
+    command:
+      - npm
+      - run
+      - backup:data
+      - --
+      - /var/lib/word2html-volume/data
+      - /var/backups/word2html-volume/backups
+
+volumes:
+  word2html-data:
+  word2html-backups:
+  caddy-data:
+  caddy-config:

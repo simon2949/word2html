@@ -116,7 +116,9 @@ export function createTimeExperimentScene(
       showPointLabel: true, showHelperLines: spec.vectors.length > 0 || (spec.constraints?.length ?? 0) > 0, showIndividualDistances: false,
       showDistanceSum: false, showFormula: true, showTrail: true,
       curveColor: '#5B5BD6', focusColor: '#E15C48', pointColor: '#E15C48',
-      helperColor: '#64748B', lineWidth: 3, pointRadius: 8, fontScale: 1,
+      helperColor: '#64748B', lineWidth: 3, pointRadius: 8,
+      lineStyle: 'solid', helperLineStyle: 'solid', helperLineWidth: 3,
+      pointStyle: 'shadow', fontScale: 1,
       animationSpeed: 0.55,
     },
     lineage: {
